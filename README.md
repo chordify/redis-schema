@@ -97,7 +97,7 @@ newtype MyData = MyData { unMyData :: Int }
 instance SimpleValue MyRedisInstance MyData
 instance Value MyRedisInstance MyData
 
--- | Define the 'Ref' instance for you key
+-- | Define the 'Ref' instance for your key
 -- type.
 instance Ref MyKey where
   type ValueType MyKey = MyData

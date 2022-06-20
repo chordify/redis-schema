@@ -1,0 +1,33 @@
+name:                redis-schema
+version:             0.1.0.0
+github:              "chordify/redis-schema"
+license:             BSD3
+author:              "Chordify"
+maintainer:          "haskelldevelopers@chordify.net"
+copyright:           "2021 Chordify"
+synopsis:            Typed, schema-based Redis library
+category:            Database
+description:         Typed, schema-based Redis library
+
+dependencies:
+- base >= 4.7 && < 5
+- containers
+- text
+- binary
+- bytestring
+- time
+- mtl
+- random
+- exceptions
+- hedis
+- uuid
+- numeric-limits
+
+default-extensions:
+- OverloadedStrings
+
+ghc-options:
+- -Wall -O2 -Werror
+
+library:
+  source-dirs: src

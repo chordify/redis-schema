@@ -1,0 +1,51 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.34.4.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 325ab5e831645cfee81aa59cc02775904afadf6a9f5fcc73f1d4e33d8a005f07
+
+name:           redis-schema
+version:        0.1.0.0
+synopsis:       Typed, schema-based Redis library
+description:    Typed, schema-based Redis library
+category:       Database
+homepage:       https://github.com/chordify/redis-schema#readme
+bug-reports:    https://github.com/chordify/redis-schema/issues
+author:         Chordify
+maintainer:     haskelldevelopers@chordify.net
+copyright:      2021 Chordify
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+
+source-repository head
+  type: git
+  location: https://github.com/chordify/redis-schema
+
+library
+  exposed-modules:
+      Database.Redis.Schema
+      Database.Redis.Schema.Lock
+  other-modules:
+      Paths_redis_schema
+  hs-source-dirs:
+      src
+  default-extensions:
+      OverloadedStrings
+  ghc-options: -Wall -O2 -Werror
+  build-depends:
+      base >=4.7 && <5
+    , binary
+    , bytestring
+    , containers
+    , exceptions
+    , hedis
+    , mtl
+    , numeric-limits
+    , random
+    , text
+    , time
+    , uuid
+  default-language: Haskell2010

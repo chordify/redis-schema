@@ -1,6 +1,8 @@
 # redis-schema
 
 A strongly typed, schema-based Redis library.
+The focus is at providing composable combinators,
+on top of which you can build your application or another library.
 
 BEWARE: The documentation is being written.
 
@@ -41,19 +43,36 @@ f pool = Redis.run pool $ do
   liftIO $ print n  -- this prints zero, assuming no writes from other threads
 ```
 
-### Parameterised variables
+### Parameterised references
+
+If you want a different reference for different days,
+you define a slightly more interesting reference type.
 
 ```haskell
+-- Note that the type constructor is still nullary (no parameters)
+-- but the data constructor takes the 'Date' in question.
 data DailyVisitors = DailyVisitors Date
 
 instance Redis.Ref DailyVisitors where
+  -- Again, the reference points to an 'Int'.
+  -- We're talking about the type of the reference so no date is present here.
   type ValueType DailyVisitors = Int
-  toIdentifier (DailyVisitors date) =
-    Redis.colonSep ["visitors", "daily", show date]
 
+  -- The location does depend on the value of the reference,
+  -- so it can depend on the date. We include the date in the Redis path.
+  toIdentifier (DailyVisitors date) =
+    Redis.colonSep ["visitors", "daily", ByteString.pack (show date)]
+
+f :: Redis.Pool -> Date -> IO ()
 f pool today = Redis.run pool $ do
-  set (DailyVisitors today) 42
-  liftIO . print =<< get (DailyVisitors today)
+  -- bump the number of visitors
+  incrementBy (DailyVisitors today) 1
+
+  -- (other threads may modify the value here)
+
+  -- read and print the reference
+  n <- get (DailyVisitors today)
+  liftIO $ print n
 ```
 
 ### Lists, Sets

@@ -9,25 +9,36 @@ BEWARE: The documentation is being written.
 ### Simple variables
 
 ```haskell
+-- This module is generally intended to be imported qualified.
+import qualified Database.Redis.Schema as Redis
+
+-- The type of references to the number of visitors.
+-- Since we want only one number of visitors, this type is a singleton.
+-- Later on, we'll see more interesting types of references.
 data NumberOfVisitors = NumberOfVisitors
 
+-- We define that NumberOfVisitors is indeed a Redis reference.
 instance Redis.Ref NumberOfVisitors where
+  -- The type of the value that NumberOfVisitors refers to is Int.
   type ValueType NumberOfVisitors = Int
+
+  -- The location of the value that NumberOfVisitors refers to is "visitors:number".
   toIdentifier NumberOfVisitors = "visitors:number"
 
+f :: Redis.Pool -> IO ()
 f pool = Redis.run pool $ do
-  -- write
+  -- write to the reference
   set NumberOfVisitors 42
   setTTL NumberOfVisitors (24 * Redis.hour)
 
-  -- atomically read and clear
+  -- atomically read and clear (zero) the reference
+  -- useful for transactional moves of data
   n2 <- take NumberOfVisitors
   liftIO $ print n2
 
-  -- read
+  -- read the value of the reference
   n <- get NumberOfVisitors
-  liftIO $ print n  -- this prints zero, assuming no other writes
-
+  liftIO $ print n  -- this prints zero, assuming no writes from other threads
 ```
 
 ### Parameterised variables
@@ -116,3 +127,7 @@ getMyData = fmap unMyData <$> get MyKey
 ## License
 
 BSD 3-clause.
+
+<!--
+vim: ts=2 sts=2 sw=2 et
+-->

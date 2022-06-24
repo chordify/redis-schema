@@ -17,7 +17,7 @@ on your website. This is how you would do it with `redis-schema`.
 
 ### Simple variables
 
-(For demonstration, the following example also includes some
+(For demonstration purposes, the following example also includes some
 basic operations you might not do while counting visitors, too. :) )
 
 ```haskell
@@ -87,6 +87,9 @@ f pool today = Redis.run pool $ do
   n <- get (DailyVisitors today)
   liftIO $ print n
 ```
+
+With composite keys, it's sometimes useful to use `Redis.colonSep`,
+which builds a single colon-separated `ByteString` from the provided components.
 
 ### Lists, Sets, Hashes, etc.
 
@@ -178,6 +181,51 @@ f pool today visitorId = do
 Using operator `(:/)`, we could write `Visitors today :/ visitorId`
 to reference a single field of a hash. However, we can also
 retrieve and print the whole hash if we choose to.
+
+#### Aside: Hashes vs. composite keys
+
+In the previous example, the reference `Visitors date`
+points to a `Map VisitorId Int`. This is one realisation of a mapping
+`(Date, VisitorId) -> Int` but not the only one.
+Another way would be including the `VisitorId` in the key like this:
+
+```haskell
+data VisitCount = VisitCount Date VisitorId
+
+instance Redis.Ref VisitCount where
+  type ValueType VisitCount = Int
+
+  toIdentifier (VisitCount date visitorId) =
+    Redis.colonSep
+      [ "visitors"
+      , ByteString.pack (show date)
+      , ByteString.pack (show visitorId)
+      ]
+```
+
+This way, every date-visitor combination gets its own full key-value entry
+in Redis. There are advantages and disadvantages to either representation.
+
+* With hashes, you also get a list of visitor IDs for each day.
+  With composite keys, you have to use the `SCAN` or `KEYS` Redis command.
+
+* It's easy to `get`, `set` or `take` whole hashes (atomically).
+  With separate keys, you have to use an explicit transaction,
+  and code up these operations manually.
+
+* Hashes take less space than the same number of values in separate keys.
+
+* You cannot set the TTL of items in a hash separately: only the whole hash has a TTL.
+  With separate keys, you can set TTL individually.
+
+Hence the encoding depends on your use case. If you're caching
+a set of related things for a certain visitor, which you want to read as a whole
+and expire as a whole, it makes sense to put them in a hash.
+
+If your items are rather separate and you want to expire them separately,
+you have to put them in separate keys.
+Fields like `date` should probably go in the (possibly composite) key
+because they will likely affect the required expiration time.
 
 ### Records
 

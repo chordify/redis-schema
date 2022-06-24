@@ -49,7 +49,7 @@ f pool = Redis.run pool $ do
 
 ### Parameterised references
 
-If you want a different reference for different days,
+If you want a separate counter for every day,
 you define a slightly more interesting reference type.
 
 ```haskell
@@ -69,7 +69,7 @@ instance Redis.Ref DailyVisitors where
 
 f :: Redis.Pool -> Date -> IO ()
 f pool today = Redis.run pool $ do
-  -- bump the number of visitors
+  -- atomically bump the number of visitors
   incrementBy (DailyVisitors today) 1
 
   -- (other threads may modify the value here)
@@ -118,9 +118,17 @@ instance Redis.Ref DailyVisitorSet where
   toIdentifier (DailyVisitorSet date) =
     Redis.colonSep ["visitor_set", "daily", ByteString.pack (show date)]
 
+f :: Redis.Pool -> Date -> VisitorId -> IO ()
 f pool today vid = Redis.run pool $ do
+  -- insert the visitor ID
   sInsert (DailyVisitorSet today) vid
+
+  -- get the size of the updated set
+  -- (and print it)
   liftIO . print =<< sSize (DailyVisitorSet today)
+
+  -- atomically get and clear the visitor set
+  -- (and print it)
   liftIO . print =<< take (DailyVisitorSet today)
 ```
 

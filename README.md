@@ -227,9 +227,10 @@ Hence the encoding depends on your use case. If you're caching
 a set of related things for a certain visitor, which you want to read as a whole
 and expire as a whole, it makes sense to put them in a hash.
 
-If your items are rather separate and you want to expire them separately,
+If your items are rather separate, you want to expire them separately,
+or you want to store structures like hashes inside,
 you have to put them in separate keys.
-Fields like `date` should probably go in the (possibly composite) key
+Fields like `date` should probably generally go in the (possibly composite) key
 because they will likely affect the required expiration time.
 
 ### Records

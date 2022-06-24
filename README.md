@@ -167,7 +167,8 @@ f pool today visitorId = do
 ```
 
 Using operator `(:/)`, we could write `Visitors today :/ visitorId`
-to reference a single field of a hash.
+to reference a single field of a hash. However, we can also
+retrieve and print the whole hash if we choose to.
 
 ### Records
 

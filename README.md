@@ -283,6 +283,10 @@ getMyData :: RedisM MyRedisInstance (Maybe Int)
 getMyData = fmap unMyData <$> get MyKey
 ```
 
+### Spread data types
+
+(over various keys)
+
 ## License
 
 BSD 3-clause.

@@ -138,9 +138,36 @@ refer to the reference documentation / source code for a complete list.
 Also, we add functions when we need them, so it's quite possible that the function
 that you require has not been added yet. Pull requests are welcome.
 
-### Maps
+### Hashes
 
+There is a special operator `(:/)` to access the items of a hash,
+as if they were individual Redis `Ref`s.
+Here's our running example with website visitors,
+except that now instead of just the count of visits, or just the set of visitors,
+we will store exactly how many times each visitor has visited us.
 
+```haskell
+data Visitors = Visitors Date
+
+instance Redis.Ref Visitors where
+  -- Each daily visitor structure is a map from visitor ID to the number of visits.
+  type ValueType Visitors = Map VisitorId Int
+
+  toIdentifier (Visitors date) =
+    Redis.colonSep ["visitors", ByteString.pack (show date)]
+
+f :: Redis.Pool -> Date -> VisitorId -> IO ()
+f pool today visitorId = do
+  -- increment one specific counter inside the hash
+  incrementBy (Visitors today :/ visitorId) 1
+
+  -- print all visitors
+  allVisitors <- get (Visitors today)
+  print allVisitors
+```
+
+Using operator `(:/)`, we could write `Visitors today :/ visitorId`
+to reference a single field of a hash.
 
 ### Records
 

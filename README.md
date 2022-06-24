@@ -186,7 +186,7 @@ retrieve and print the whole hash if we choose to.
 
 In the previous example, the reference `Visitors date`
 points to a `Map VisitorId Int`. This is one realisation of a mapping
-`(Date, VisitorId) -> Int` but not the only one.
+`(Date, VisitorId) -> Int` but not the only possible one.
 Another way would be including the `VisitorId` in the key like this:
 
 ```haskell
@@ -217,6 +217,11 @@ in Redis. There are advantages and disadvantages to either representation.
 
 * You cannot set the TTL of items in a hash separately: only the whole hash has a TTL.
   With separate keys, you can set TTL individually.
+
+* You cannot have complex data types (Redis sets, Redis hashes, etc.)
+  nested inside hashes without encoding them as `ByteString`s first.
+  (See [Lists, sets, hashes, etc.](#lists-sets-hashes-etc))
+  There are no such restrictions for separate keys.
 
 Hence the encoding depends on your use case. If you're caching
 a set of related things for a certain visitor, which you want to read as a whole

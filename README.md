@@ -1,8 +1,12 @@
 # redis-schema
 
 A strongly typed, schema-based Redis library.
-The focus is at providing composable combinators,
-on top of which you can build your application or another library.
+The focus is at composability: providing combinators,
+on top of which you can correctly build your application or another library.
+
+Examples of libraries (TODO):
+- Lock
+- Remote Job
 
 BEWARE: The documentation is being written.
 
@@ -75,15 +79,44 @@ f pool today = Redis.run pool $ do
   liftIO $ print n
 ```
 
-### Lists, Sets
+### Lists, Sets, Hashes, etc.
+
+What we've read/written so far were `SimpleValue`s: data items that can be
+encoded as `ByteString`s and used without restrictions.
+However, Redis also provides richer data structures, including lists, sets,
+and maps/hashes.
+
+The advantage is that Redis provides operations to manipulate these data
+structures directly. You can insert elements, delete elements, etc., without
+reading a `ByteString`-encoded structure and writing its modified version back.
+
+The disadvantage is that Redis does not support nesting them.
+
+That does not mean there's absolutely no way to put sets in sets --
+if you encode the inner sets into ByteString, you can nest them however you want.
+However, you will not be able to use functions like `sInsert` or `sDelete`
+to modify the inner sets,
+and you'll have to read/write the entire inner value every time.
+
+This is reflected in `redis-schema` by the fact that
+the `SimpleValue` instance is not defined for `Set a`, `Map k v` and `[a]`,
+which prevents nesting them directly.
+
+On the other hand, `redis-schema` defines additional functions
+specific to these data structures, such as the above mentioned
+`sInsert`, which is used to insert elements into a Redis set.
 
 ```haskell
+-- The set of visitor IDs for the given date.
 data DailyVisitorSet = DailyVisitorSet Date
 
 instance Redis.Ref DailyVisitorSet where
+  -- This reference points to a set of visitor IDs.
   type ValueType DailyVisitorSet = Set VisitorId
+
+  -- The Redis location of the value.
   toIdentifier (DailyVisitorSet date) =
-    Redis.colonSep ["visitor_set", "daily", show date]
+    Redis.colonSep ["visitor_set", "daily", ByteString.pack (show date)]
 
 f pool today vid = Redis.run pool $ do
   sInsert (DailyVisitorSet today) vid

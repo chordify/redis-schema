@@ -12,10 +12,10 @@ BEWARE: The documentation is being written.
 
 ## Examples
 
-### Simple variables
-
 Imagine you want to use Redis to count the number of the visitors
 on your website. This is how you would do it with `redis-schema`.
+
+### Simple variables
 
 (For demonstration, the following example also includes some
 basic operations you might not do while counting visitors, too. :) )

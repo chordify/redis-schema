@@ -14,6 +14,12 @@ BEWARE: The documentation is being written.
 
 ### Simple variables
 
+Imagine you want to use Redis to count the number of the visitors
+on your website. This is how you would do it with `redis-schema`.
+
+(For demonstration, the following example also includes some
+basic operations you might not do while counting visitors, too. :) )
+
 ```haskell
 -- This module is generally intended to be imported qualified.
 import qualified Database.Redis.Schema as Redis
@@ -36,6 +42,9 @@ f pool = Redis.run pool $ do
   -- write to the reference
   set NumberOfVisitors 42
   setTTL NumberOfVisitors (24 * Redis.hour)
+
+  -- atomically increment the number of visitors
+  incrementBy (DailyVisitors today) 1
 
   -- atomically read and clear (zero) the reference
   -- useful for transactional moves of data

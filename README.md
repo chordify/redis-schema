@@ -132,7 +132,15 @@ f pool today vid = Redis.run pool $ do
   liftIO . print =<< take (DailyVisitorSet today)
 ```
 
+There is a number of functions available for these structures,
+refer to the reference documentation / source code for a complete list.
+
+Also, we add functions when we need them, so it's quite possible that the function
+that you require has not been added yet. Pull requests are welcome.
+
 ### Maps
+
+
 
 ### Records
 

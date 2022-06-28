@@ -256,6 +256,14 @@ data VisitorField :: * -> * where
   Visits :: VisitorField Int
   Clicks :: VisitorField Int
 
+-- We define how to translate record keys to strings
+-- that will be used to key the Redis hash.
+instance Redis.RecordField VisitorField where
+  rfToBS Email = "email"
+  rfToBS DateOfBirth = "date-of-birth"
+  rfToBS Visits = "visits"
+  rfToBS Clicks = "clicks"
+
 -- Then we define the type of references pointing to the visitor statistics
 -- for any given visitor ID.
 data VisitorStats = VisitorStats VisitorId
@@ -271,7 +279,39 @@ instance Redis.Ref VisitorStats where
     Redis.colonSep ["visitors", "statistics", Redis.toBS visitorId]
 ```
 
-`NumberOfVisits` per `Date`
+Now we can get references to the individual fields with the specialised operator `:.`.
+
+```haskell
+handleClick :: VisitorId -> Redis ()
+handleClick visitorId = do
+  -- for demonstration purposes, log the email
+  email <- Redis.get (VisitorStats visitorId :. Email)
+  liftIO $ print email
+
+  -- atomically increase the counter of clicks
+  Redis.incrementBy (VisitorStats visitorId :. Clicks) 1
+```
+
+In the current implementation, records cannot be read or written as a whole.
+There is no special reason for that, except that it would be too much type-level code
+that we currently do not need, so we keep it simple.
+
+However, see the next section for the next best solution.
+
+#### Aside: non-fixed record fields
+
+The number of fields in a record is not *really* fixed.
+Consider the following declaration.
+
+```haskell
+data VisitorField :: * -> * where
+  Visits :: Date -> VisitorField Int
+
+instance Redis.RecordField VisitorField where
+  rfToBS (Visits date) = Redis.colonSep ["visits", Redis.toBS date]
+```
+
+This creates a record with a separate field for every date, named `visits:${DATE}`.
 
 ### Meta-records
 

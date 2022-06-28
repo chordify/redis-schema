@@ -437,9 +437,11 @@ instance Redis.Value Redis.DefaultInstance VisitorInfo where
   {- etc. -}
 ```
 
-TODO: you must specify an instance, i think (?)
+It's a bit of a boilerplate, but now all the scatter/gather code is packed
+in the `Value` instance, it's safe and it composes. Moreover, with small
+let-bound functions, the repetition can be greatly minimised.
 
-TODO: shorten code with aliases
+TODO: you must specify an instance, i think (?), or it may not even be relevant
 
 ## Libraries
 
@@ -447,7 +449,6 @@ TODO: shorten code with aliases
 
 * Exclusive
 * Shared
-
 
 ## License
 

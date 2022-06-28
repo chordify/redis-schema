@@ -293,6 +293,7 @@ handleClick visitorId = do
 ```
 
 In the current implementation, records cannot be read or written as a whole.
+(However, they *can* be deleted and their TTL can be set.)
 There is no special reason for that, except that it would be too much type-level code
 that we currently do not need, so we keep it simple.
 
@@ -314,6 +315,23 @@ instance Redis.RecordField VisitorField where
 This creates a record with a separate field for every date, named `visits:${DATE}`.
 
 ### Meta-records
+
+In Haskell, records can be nested arbitrarily. You can have a record
+that contains some fields alongside another couple of records,
+which themselves contain arbitrarily nested maps and lists of further records.
+
+Redis does not support such arbitrary nesting. However,
+we can often work around this limitation by distributing the datastructure
+over a number of separate Redis keys.
+For example, consider a case where each visitor should be associated with
+the number of visits, the number of clicks, and the set of their favourite songs.
+Here we can keep the visits+clicks in a record reference per visitor, and the set of favourites
+in a separate `Set`-typed reference, again per visitor.
+However, we still need to read the visits+clicks separately from the favourites.
+
+Since `redis-schema` encourages compositionality, it is possible to make data structures
+that gather (or scatter) all their data across Redis automatically, without having
+to manipulate every component separately every time. Here's an example.
 
 ### Transactions
 

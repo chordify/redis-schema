@@ -1,7 +1,7 @@
 # redis-schema
 
 A strongly typed, schema-based Redis library.
-The focus is at composability: providing combinators,
+The focus is at composability: providing combinators
 on top of which you can correctly build your application or another library.
 
 Examples of libraries (TODO):
@@ -18,7 +18,7 @@ on your website. This is how you would do it with `redis-schema`.
 ### Simple variables
 
 (For demonstration purposes, the following example also includes some
-basic operations you might not do while counting visitors, too. :) )
+basic operations you might *not* do while counting visitors, too. :) )
 
 ```haskell
 -- This module is generally intended to be imported qualified.
@@ -206,7 +206,7 @@ instance Redis.Ref VisitCount where
 This way, every date-visitor combination gets its own full key-value entry
 in Redis. There are advantages and disadvantages to either representation.
 
-* With hashes, you also get a list of visitor IDs for each day.
+* With hashes, you also implicitly get a list of visitor IDs for each day.
   With composite keys, you have to use the `SCAN` or `KEYS` Redis command.
 
 * It's easy to `get`, `set` or `take` whole hashes (atomically).
@@ -234,6 +234,46 @@ Fields like `date` should probably generally go in the (possibly composite) key
 because they will likely affect the required expiration time.
 
 ### Records
+
+We have just seen how to use Redis hashes to store values of type `Map k v`.
+The number of items in the map is unlimited
+but all keys and values must have the same type.
+
+There's another (major) use case for Redis hashes: records.
+Records are structures which contain a fixed number of named values,
+where each value can have a different type.
+It is therefore a natural way of clustering related data together.
+
+Here's an example showing how records are modelled in `redis-schema`.
+
+```haskell
+-- First, we use GADTs to describe the available fields and their types.
+-- Here, 'Email' has type 'Text', 'DateOfBirth' has type 'Date',
+-- and 'Visits' and 'Clicks' have type 'Int'.
+data VisitorField :: * -> * where
+  Email :: VisitorField Text
+  DateOfBirth :: VisitorField Date
+  Visits :: VisitorField Int
+  Clicks :: VisitorField Int
+
+-- Then we define the type of references pointing to the visitor statistics
+-- for any given visitor ID.
+data VisitorStats = VisitorStats VisitorId
+
+-- Finally, we declare that the type of references is indeed a Redis reference.
+instance Redis.Ref VisitorStats where
+  -- The type pointed to is 'Redis.Record VisitorField', which means
+  -- a record with the fields defined by 'VisitorField'.
+  type ValueType VisitorStats = Redis.Record VisitorField
+
+  -- As usual, this defines what key in Redis this reference points to.
+  toIdentifier (VisitorStats visitorId) =
+    Redis.colonSep ["visitors", "statistics", Redis.toBS visitorId]
+```
+
+`NumberOfVisits` per `Date`
+
+### Meta-records
 
 ### Transactions
 

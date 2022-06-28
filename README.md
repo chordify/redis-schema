@@ -279,6 +279,9 @@ instance Redis.Ref VisitorStats where
     Redis.colonSep ["visitors", "statistics", Redis.toBS visitorId]
 ```
 
+This example is a bit silly because if you know `DateOfBirth` about your unregistered visitors,
+there's something very wrong. However, for demonstrational purposes, it'll suffice.
+
 Now we can get references to the individual fields with the specialised operator `:.`.
 
 ```haskell
@@ -297,7 +300,7 @@ In the current implementation, records cannot be read or written as a whole.
 There is no special reason for that, except that it would be too much type-level code
 that we currently do not need, so we keep it simple.
 
-However, see the next section for the next best solution.
+However, see [Meta-records](#meta-records) for the next best solution.
 
 #### Aside: non-fixed record fields
 
@@ -314,33 +317,15 @@ instance Redis.RecordField VisitorField where
 
 This creates a record with a separate field for every date, named `visits:${DATE}`.
 
-### Meta-records
-
-In Haskell, records can be nested arbitrarily. You can have a record
-that contains some fields alongside another couple of records,
-which themselves contain arbitrarily nested maps and lists of further records.
-
-Redis does not support such arbitrary nesting. However,
-we can often work around this limitation by distributing the datastructure
-over a number of separate Redis keys.
-For example, consider a case where each visitor should be associated with
-the number of visits, the number of clicks, and the set of their favourite songs.
-Here we can keep the visits+clicks in a record reference per visitor, and the set of favourites
-in a separate `Set`-typed reference, again per visitor.
-However, we still need to read the visits+clicks separately from the favourites.
-
-Since `redis-schema` encourages compositionality, it is possible to make data structures
-that gather (or scatter) all their data across Redis automatically, without having
-to manipulate every component separately every time. Here's an example.
-
 ### Transactions
 
-### Locks
-
-* Exclusive
-* Shared
+TODO
 
 ### Custom data types
+
+TODO
+
+TODO: probably need to talk about instances? separate section?
 
 ```haskell
 import Database.Redis.Schema
@@ -381,9 +366,88 @@ getMyData :: RedisM MyRedisInstance (Maybe Int)
 getMyData = fmap unMyData <$> get MyKey
 ```
 
-### Spread data types
+### Meta-records
 
-(over various keys)
+In Haskell, records can be nested arbitrarily. You can have a record
+that contains some fields alongside another couple of records,
+which themselves contain arbitrarily nested maps and lists of further records.
+
+Redis does not support such arbitrary nesting. However,
+we can often work around this limitation by distributing the datastructure
+over a number of separate Redis keys.
+For example, consider a case where each visitor should be associated with
+the number of visits, the number of clicks, and the set of their favourite songs.
+Here we can keep the visits+clicks in one record reference per visitor, and the set of favourites
+in another reference, again per visitor.
+However, we still need to read the visits+clicks separately from the favourites.
+This is not just a question of convenience: two separate reads may lead to a race condition,
+unless we run them in a transaction.
+
+Since `redis-schema` encourages compositionality, it is possible to make data structures
+that gather (or scatter) all their data across Redis automatically, without having
+to manipulate every component separately every time. Here's an example.
+
+```haskell
+-- VisitorFields are visits and clicks.
+data VisitorField :: * -> * where
+  Visits :: VisitorField Int
+  Clicks :: VisitorField Int
+
+-- VisitorStats is a record with VisitorFields
+data VisitorStats = VisitorStats VisitorId
+instance RedisRef VisitorStats where
+  type ValueType VisitorStats = Redis.Record VisitorField
+  toIdentifier = {- ...omitted... -}
+
+-- A separate reference to the favourite songs.
+data FavouriteSongs = FavouriteSongs VisitorId
+instance Redis.Ref FavouriteSongs where
+  type ValueType FavouriteSongs = Set SongId
+  toIdentifier = {- ...omitted... -}
+
+-- Finally, here's our composite record that we want to read/write atomically.
+data VisitorInfo = VisitorInfo
+  { viVisits :: Int
+  , viClicks :: Int
+  , viFavouriteSongs :: Set SongId
+  }
+
+instance Redis.Value Redis.DefaultInstance VisitorInfo where
+  type Identifier VisitorInfo = VisitorId
+
+  txValGet visitorId = do
+    visits <- fromMaybe 0 <$> Redis.txGet (VisitorStats visitorId :. Visits)
+    clicks <- fromMaybe 0 <$> Redis.txGet (VisitorStats visitorId :. Clicks)
+    favourites <- fromMaybe Set.empty <$> Redis.txGet (FavouriteSongs visitorId)
+    return $ Just VisitorInfo
+      { viVisits = visits
+      , viClicks = clicks
+      , viFavourites = favourites
+      }
+
+  txValSet visitorId vi = do
+    Redis.txSet (VisitorStats visitorId :. Visits) (viVisits vi)
+    Redis.txSet (VisitorStats visitorId :. Clicks) (viClicks vi)
+    Redis.txSet (FavouriteSongs visitorId) (viFavourites vi)
+
+  txValDelete visitorId = do
+    Redis.txDelete (VisitorStats visitorId)
+    Redis.txDelete (FavouriteSongs visitorId)
+
+  {- etc. -}
+```
+
+TODO: you must specify an instance, i think (?)
+
+TODO: shorten code with aliases
+
+## Libraries
+
+### Locks
+
+* Exclusive
+* Shared
+
 
 ## License
 

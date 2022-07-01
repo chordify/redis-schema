@@ -53,7 +53,7 @@ f pool = Redis.run pool $ do
 
   -- read the value of the reference
   n <- get NumberOfVisitors
-  liftIO $ print n  -- this prints zero, assuming no writes from other threads
+  liftIO $ print n  -- this prints "Just 0", assuming no writes from other threads
 ```
 
 ### Parameterised references
@@ -359,7 +359,66 @@ Redis transactions are run using the combinator called `atomically`,
 and they also support throwing exceptions using `txThrow`. Throwing
 an exception in a transaction will not prevent any side effects from taking place;
 only the exception will be re-thrown in the `RedisM` monad
-instead of returning the output of the transaction.
+instead of returning the output of the transaction. The `Alternative` instance
+of `Tx` can be used to "catch" these exceptions.
+
+#### Working with transactions
+
+Each function, like `get`, `set` or `take`,
+has a sibling that can be used in a transaction, usually prefixed with `tx`:
+
+```haskell
+get   :: Ref ref => ref -> RedisM (RefInstance ref) (Maybe (ValueType ref))
+txGet :: Ref ref => ref -> Tx     (RefInstance ref) (Maybe (ValueType ref))
+```
+
+With `ApplicativeDo`, these transactional functions can be used as conveniently
+as their non-transactional counterparts. For example, the function `take`,
+which atomically reads and deletes a Redis value, can be implemented as follows:
+
+```haskell
+{-# LANGUAGE ApplicativeDo #-}
+
+txTake :: Ref ref => ref -> Tx (RefInstance ref) (Maybe (ValueType ref))
+txTake ref = do
+  value <- txGet ref
+  txDelete_ ref
+  pure value
+
+take :: Ref ref => ref -> RedisM (RefInstance ref) (Maybe (ValueType ref))
+take ref = atomically (take ref)
+```
+
+The `do` block above illustrates the convenience of `ApplicativeDo`;
+`redis-schema` actually uses a shorter but equivalent definition
+`txTake ref = txGet ref <* txDelete_ ref`.
+
+#### What Redis transactions cannot do
+
+One might try to attempt an alternative implementation of `txIncrementBy`:
+
+```haskell
+import Data.Maybe (fromMaybe)
+
+txIncrementBy' :: (SimpleRef ref, Num (ValueType ref))
+  => ref -> Integer -> Tx (RefInstance ref) (ValueType ref)
+txIncrementBy' ref incr = do
+  oldValue <- fromMaybe 0 <$> txGet ref        -- COMPILER ERROR
+  let newValue = oldValue + fromInteger incr
+  txSet ref newValue
+  pure newValue
+```
+
+The compiler complains
+```
+• Could not deduce (Monad (Tx (RefInstance ref)))
+    arising from a do statement
+```
+because `oldValue` is used non-trivially in the `do` block,
+but `Tx` implements only `Applicative` and not `Monad`.
+
+This error is exactly a goal of the design: it indicates at compile time
+that Redis does not support this usage pattern.
 
 #### Errors in transactions
 
@@ -507,7 +566,7 @@ It's a bit of a boilerplate, but now all the scatter/gather code is packed
 in the `Value` instance, it's safe and it composes. Moreover, with small
 let-bound functions, the repetition can be greatly minimised.
 
-TODO: you must specify an instance, i think (?), or it may not even be relevant
+TODO: you must specify an instance, i think that all sub-elements must be in the same instance
 
 ## Libraries
 
@@ -519,6 +578,12 @@ TODO: you must specify an instance, i think (?), or it may not even be relevant
 ### Remote jobs
 
 TODO
+
+## Future work
+
+* Rework Maybe (e.g. numeric types never return `Nothing`)
+* `SimpleValue` etc., something can be read/written but not setttled etc.
+* whole records
 
 ## License
 

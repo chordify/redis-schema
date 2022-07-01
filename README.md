@@ -321,9 +321,9 @@ This creates a record with a separate field for every date, named `visits:${DATE
 
 Redis does support transactions and `redis-schema` supports them,
 but they are not like SQL transactions, which you may be accustomed to.
-A more suggestive name for Redis transactions might be "atomically batched operations".
+A more suggestive name for Redis transactions might be "atomic operation batches".
 
-The main difference between SQL-like transactions and batched transactions
+The main difference between SQL-like transactions and batched Redis transactions
 is that in SQL, you can start a transaction, run a query, receive its output,
 and then run another query in the same transaction. Sending queries and receiving their outputs
 can be interleaved in the same transaction, and later queries can depend on the output
@@ -339,6 +339,21 @@ Redis-style fixed-effects transactions are described by `Applicative` functors -
 and this is exactly the interface that `redis-schema` provides for Redis transactions.
 
 #### The `Tx` functor
+
+`redis-schema` defines the `Tx` functor for transactional computations.
+
+```haskell
+newtype Tx inst a
+instance Functor (Tx inst)
+instance Applicative (Tx inst)
+instance Alternative (Tx inst)
+
+atomically :: Tx inst a -> RedisM inst a
+```
+
+The parameter `inst` is explained
+in section [Redis instances](#redis-instances),
+but can be ignored for now.
 
 #### Errors in transactions
 
@@ -357,7 +372,16 @@ values that are not available yet. We believe that using an applicative functor
 instead is a perfect match for this use case: it allows exactly the right
 operations, and all wrapping/unwrapping can be done entirely transparently.
 
+Another improvement of `Tx` over `Hedis.RedisTx` is that `Tx` allows throwing
+`RedisException`s transparently; it takes care of propagating them correctly.
+
+### Exceptions
+
+TODO `RedisException`
+
 ### Custom data types
+
+#### Redis instances
 
 TODO
 

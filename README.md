@@ -319,7 +319,43 @@ This creates a record with a separate field for every date, named `visits:${DATE
 
 ### Transactions
 
-TODO
+Redis does support transactions and `redis-schema` supports them,
+but they are not like SQL transactions, which you may be accustomed to.
+A more suggestive name for Redis transactions might be "atomically batched operations".
+
+The main difference between SQL-like transactions and batched transactions
+is that in SQL, you can start a transaction, run a query, receive its output,
+and then run another query in the same transaction. Sending queries and receiving their outputs
+can be interleaved in the same transaction, and later queries can depend on the output
+of previous queries.
+
+With Redis-style batched transactions, on the other hand, you can batch up multiple operations
+but the atomicity of a transaction ends at the moment you receive the output of those operations.
+Hence later operations in a batch cannot depend on the output of the previous operations,
+as that output is not available yet.
+
+While the structure of SQL-like transactions is captured by the `Monad` typeclass,
+Redis-style fixed-effects transactions are described by `Applicative` functors --
+and this is exactly the interface that `redis-schema` provides for Redis transactions.
+
+#### The `Tx` functor
+
+#### Errors in transactions
+
+Beware that Redis won't roll back failed transactions, which means they
+are not atomic in that sense. A Redis transaction that fails halfway through
+will retain all effects up to the point of failure.
+See [the Redis documentation](https://redis.io/docs/manual/transactions/#errors-inside-a-transaction)
+for details and rationale.
+
+#### Monads vs applicative functors
+
+The underlying library of `redis-schema`, Hedis, provides a monad `RedisTx`
+to describe Redis transactions. Since monads would be too powerful, Hedis uses
+an opaque wrapper for `Queued` results to prevent the users from accessing
+values that are not available yet. We believe that using an applicative functor
+instead is a perfect match for this use case: it allows exactly the right
+operations, and all wrapping/unwrapping can be done entirely transparently.
 
 ### Custom data types
 
@@ -449,6 +485,10 @@ TODO: you must specify an instance, i think (?), or it may not even be relevant
 
 * Exclusive
 * Shared
+
+### Remote jobs
+
+TODO
 
 ## License
 

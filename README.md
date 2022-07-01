@@ -356,8 +356,9 @@ The type parameter `inst` is explained in section [Redis instances](#redis-insta
 but can be ignored for now.
 
 Redis transactions are run using the combinator called `atomically`,
-and they also support throwing exceptions using `txThrow`. Throwing
-an exception in a transaction will not prevent any side effects from taking place;
+and they also support throwing exceptions using `txThrow`. A failing transactional operation
+or manually throwing
+an exception in a transaction will not prevent any other side effects from taking place;
 only the exception will be re-thrown in the `RedisM` monad
 instead of returning the output of the transaction. The `Alternative` instance
 of `Tx` can be used to "catch" these exceptions.
@@ -430,9 +431,7 @@ an opaque wrapper for `Queued` results to prevent the users from accessing
 values that are not available yet. We believe that using an applicative functor
 instead is a perfect match for this use case: it allows exactly the right
 operations, and all wrapping/unwrapping can be done entirely transparently.
-
-Another improvement of `Tx` is that `Tx` allows throwing
-`RedisException`s transparently.
+`Tx` also allows throwing propagating errors from transactions transparently.
 
 ### Exceptions
 

@@ -349,11 +349,17 @@ instance Applicative (Tx inst)
 instance Alternative (Tx inst)
 
 atomically :: Tx inst a -> RedisM inst a
+txThrow :: RedisException -> Tx inst a
 ```
 
-The parameter `inst` is explained
-in section [Redis instances](#redis-instances),
+The type parameter `inst` is explained in section [Redis instances](#redis-instances),
 but can be ignored for now.
+
+Redis transactions are run using the combinator called `atomically`,
+and they also support throwing exceptions using `txThrow`. Throwing
+an exception in a transaction will not prevent any side effects from taking place;
+only the exception will be re-thrown in the `RedisM` monad
+instead of returning the output of the transaction.
 
 #### Errors in transactions
 

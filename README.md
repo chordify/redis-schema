@@ -364,8 +364,8 @@ of `Tx` can be used to "catch" these exceptions.
 
 #### Working with transactions
 
-Each function, like `get`, `set` or `take`,
-has a sibling that can be used in a transaction, usually prefixed with `tx`:
+Most functions, like `get`, `set` or `take`,
+have a sibling that can be used in a transaction, usually prefixed with `tx`:
 
 ```haskell
 get   :: Ref ref => ref -> RedisM (RefInstance ref) (Maybe (ValueType ref))
@@ -430,8 +430,8 @@ values that are not available yet. We believe that using an applicative functor
 instead is a perfect match for this use case: it allows exactly the right
 operations, and all wrapping/unwrapping can be done entirely transparently.
 
-Another improvement of `Tx` over `Hedis.RedisTx` is that `Tx` allows throwing
-`RedisException`s transparently; it takes care of propagating them correctly.
+Another improvement of `Tx` is that `Tx` allows throwing
+`RedisException`s transparently.
 
 ### Exceptions
 

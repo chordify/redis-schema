@@ -416,8 +416,9 @@ that Redis does not support this usage pattern.
 #### Errors in transactions
 
 Beware that Redis won't roll back failed transactions, which means they
-are not atomic in that sense. A Redis transaction that fails halfway through
-will retain all effects up to the point of failure.
+are not atomic in that sense, and may be carried out incompletely.
+A Redis transaction that fails in the middle
+will keep going and retain all effects except for any failed operations.
 See [the Redis documentation](https://redis.io/docs/manual/transactions/#errors-inside-a-transaction)
 for details and rationale.
 

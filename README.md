@@ -374,24 +374,17 @@ txGet :: Ref ref => ref -> Tx     (RefInstance ref) (Maybe (ValueType ref))
 
 With `ApplicativeDo`, these transactional functions can be used as conveniently
 as their non-transactional counterparts. For example, the function `take`,
-which atomically reads and deletes a Redis value, can be implemented as follows:
+which atomically reads and deletes a Redis value, could be (re-)implemented as follows:
 
 ```haskell
 {-# LANGUAGE ApplicativeDo #-}
 
-txTake :: Ref ref => ref -> Tx (RefInstance ref) (Maybe (ValueType ref))
-txTake ref = do
+take :: Ref ref => ref -> RedisM (RefInstance ref) (Maybe (ValueType ref))
+take ref = atomically $ do
   value <- txGet ref
   txDelete_ ref
   pure value
-
-take :: Ref ref => ref -> RedisM (RefInstance ref) (Maybe (ValueType ref))
-take ref = atomically (take ref)
 ```
-
-The `do` block above illustrates the convenience of `ApplicativeDo`;
-`redis-schema` actually uses a shorter but equivalent definition
-`txTake ref = txGet ref <* txDelete_ ref`.
 
 #### What Redis transactions cannot do
 

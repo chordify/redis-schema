@@ -10,6 +10,15 @@ Examples of libraries (TODO):
 
 BEWARE: The documentation is being written.
 
+## Main contributions
+
+("Why `redis-schema` and not something else?)
+
+- schema + type-safety
+- composability
+  - especially composability via transactions
+- non-string keys
+
 ## Examples
 
 Imagine you want to use Redis to count the number of the visitors

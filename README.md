@@ -304,7 +304,7 @@ handleClick visitorId = do
   Redis.incrementBy (VisitorStats visitorId :. Clicks) 1
 ```
 
-In the current implementation, records cannot be read or written as a whole.
+In the current implementation, `Record`s cannot be read or written as a whole.
 (However, they *can* be deleted and their TTL can be set.)
 There is no special reason for that, except that it would be too much type-level code
 that we currently do not need, so we keep it simple.
@@ -324,7 +324,13 @@ instance Redis.RecordField VisitorField where
   rfToBS (Visits date) = Redis.colonSep ["visits", Redis.toBS date]
 ```
 
-This creates a record with a separate field for every date, named `visits:${DATE}`.
+This creates a record with a separate field for every date:
+
+```haskell
+handleVisit :: VisitorId -> Date -> Redis ()
+handleVisit visitorId today = do
+  Redis.incrementBy (VisitorStats visitorId :. Visits today) 1
+```
 
 ### Transactions
 

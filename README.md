@@ -342,12 +342,14 @@ The main difference between SQL-like transactions and batched Redis transactions
 is that in SQL, you can start a transaction, run a query, receive its output,
 and then run another query in the same transaction. Sending queries and receiving their outputs
 can be interleaved in the same transaction, and later queries can depend on the output
-of previous queries.
+of previous queries, while the database takes care of the ACIDity of the transaction.
 
-With Redis-style batched transactions, on the other hand, you can batch up multiple operations
-but the atomicity of a transaction ends at the moment you receive the output of those operations.
-Hence later operations in a batch cannot depend on the output of the previous operations,
-as that output is not available yet.
+With Redis-style batched transactions, on the other hand, you can batch up
+multiple operations but the atomicity of a transaction ends at the moment you
+receive the output of those operations. Anything you do with the output is not
+enclosed in that transaction anymore. In other words, later operations in a
+batched transaction cannot depend on the output of the previous operations, as
+that output is not available yet.
 
 While the structure of SQL-like transactions is captured by the `Monad` typeclass,
 Redis-style fixed-effects transactions are described by `Applicative` functors --

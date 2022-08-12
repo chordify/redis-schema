@@ -347,9 +347,10 @@ of previous queries, while the database takes care of the ACIDity of the transac
 With Redis-style batched transactions, on the other hand, you can batch up
 multiple operations but the atomicity of a transaction ends at the moment you
 receive the output of those operations. Anything you do with the output is not
-enclosed in that transaction anymore. In other words, later operations in a
-batched transaction cannot depend on the output of the previous operations, as
-that output is not available yet.
+enclosed in that transaction anymore, and other clients could have modified the
+data in the meantime. In other words, later operations in a batched transaction
+cannot depend on the output of the previous operations, as that output is not
+available yet.
 
 While the structure of SQL-like transactions is captured by the `Monad` typeclass,
 Redis-style fixed-effects transactions are described by `Applicative` functors --

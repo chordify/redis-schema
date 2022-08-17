@@ -467,6 +467,27 @@ and thrown at the `RedisM` level instead of returning the result of the transact
 
 ### Custom data types
 
+Every type that can be stored in Redis using `redis-schema`
+comes with a `Value` instance that describes how to read, write, and perform
+other operations on values of that type in Redis.
+
+There are two kinds of Redis `Value`s: simple values and non-simple values.
+Simple values are those that encode/decode to/from a `ByteString`, and thus
+have no restrictions on how they can be used in Redis.
+They can be stored in top-level keys, as well as in Redis lists,
+Redis sets, Redis hashes, etc. Simple values include
+integers, floats, text, bytestrings, etc.
+
+Non-simple values are all values that are more complicated than a bytestring,
+and thus will come with restrictions. For example, Redis lists must contain only
+simple values but they themselves are not simple values.
+
+Let's start discussing simple values.
+
+#### Simple values
+
+#### Non-simple values
+
 #### Redis instances
 
 TODO

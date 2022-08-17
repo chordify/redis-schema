@@ -515,7 +515,7 @@ the number of visits, the number of clicks, and the set of their favourite songs
 Here we can keep the visits+clicks in one record reference per visitor, and the set of favourites
 in another reference, again per visitor.
 However, we still need to read the visits+clicks separately from the favourites.
-This is not just a question of convenience: two separate reads may lead to a race condition,
+This is not just an impediment to convenience: two separate reads may lead to a race condition,
 unless we run them in a transaction.
 
 Since `redis-schema` encourages compositionality, it is possible to make data structures
@@ -530,7 +530,7 @@ data VisitorField :: * -> * where
 
 -- VisitorStats is a record with VisitorFields
 data VisitorStats = VisitorStats VisitorId
-instance RedisRef VisitorStats where
+instance Redis.Ref VisitorStats where
   type ValueType VisitorStats = Redis.Record VisitorField
   toIdentifier = {- ...omitted... -}
 
@@ -576,7 +576,21 @@ It's a bit of a boilerplate, but now all the scatter/gather code is packed
 in the `Value` instance, it's safe and it composes. Moreover, with small
 let-bound functions, the repetition can be greatly minimised.
 
-TODO: you must specify an instance, i think that all sub-elements must be in the same instance
+#### Aside: instances
+
+Looking back at this instance head:
+```haskell
+instance Redis.Value Redis.DefaultInstance VisitorInfo where
+```
+we see that unlike in the usual case, this `Value` instance has been declared specifically
+for `DefaultInstance`. The reason is that the definition of the `Value` instance
+for `VisitorInfo` accesses Redis refs `VisitorStats` and `FavouriteSongs`,
+and these refs are linked to `DefaultInstance`.
+
+Since every Redis `Ref` must be linked to a specific Redis instance, and cannot be polymorphic
+in the instance,
+all meta-records that access them under the hood must be declared for that particular instance.
+Consequently, all `Ref`s that make up a meta-record must be linked to the same Redis instance.
 
 ## Libraries
 

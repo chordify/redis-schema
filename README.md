@@ -19,7 +19,7 @@ BEWARE: The documentation is being written.
   - especially composability via transactions
 - non-string keys
 
-## Examples
+## Tutorial by example
 
 Imagine you want to use Redis to count the number of the visitors
 on your website. This is how you would do it with `redis-schema`.
@@ -452,7 +452,18 @@ operations, and all wrapping/unwrapping can be done entirely transparently.
 
 ### Exceptions
 
-TODO `RedisException`
+The type of exceptions in `redis-schema` is `RedisException`,
+and they are thrown using `throwIO` under the hood.
+These arise mostly from internal error conditions, such as
+connection errors, decoding errors, etc.,
+but library users can nevertheless still throw them manually
+using `throw :: RedisException -> RedisM inst a`.
+
+Unlike `hedis`, `redis-schema` does support throwing exceptions
+in transactions. Exceptions do *not* abort transactions
+-- all effects of a transaction will persist even if an exception has been thrown --
+but `RedisException`s thrown using `txThrow` are transparently propagated out of the transaction
+and thrown at the `RedisM` level instead of returning the result of the transaction.
 
 ### Custom data types
 

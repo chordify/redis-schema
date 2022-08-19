@@ -570,48 +570,89 @@ may be revisited in the future.
 
 #### Redis instances
 
-TODO
+In section [Simple Variables](#simple-variables), we have seen that
+a `Redis.Ref` determines a "path to a variable" in Redis.
+But what if you run more Redis servers? You might want that to use different
+key eviction policies and different memory limits for different purposes.
 
-TODO: probably need to talk about instances? separate section?
+The definition of `Redis.Ref` includes an extra associated type family
+called `RefInstance`, which identifies the server, representing the hitherto
+missing part of the "path to the variable". This type family has a default
+value `DefaultInstance`, which is why we have not needed to deal with it so far.
+Here's what it looks like:
 
 ```haskell
-import Database.Redis.Schema
+-- | The kind of Redis instances. Ideally, this would be a user-defined DataKind,
+--   but since Haskell does not have implicit arguments,
+--   that would require that we index everything with it explicitly,
+--   which would create a lot of syntactic noise.
+--
+--   (Ab)using the * kind for instances is a compromise.
+type Instance = *
 
--- | Define a custom redis instance.
--- This is optional, but useful in case
--- you are using multiple Redis servers.
-data MyRedisInstance
+-- | We also define a default instance.
+--   This is convenient for code bases using only one Redis instance,
+--   since 'RefInstance' defaults to this. (See the 'Ref' typeclass below.)
+data DefaultInstance
 
--- | Define the type that you want to use
--- to store your data under.
-data MyKey = MyKey
+-- | The Redis monad related to the default instance.
+type Redis = RedisM DefaultInstance
 
--- | Define the data type that you wish to
--- store.
-newtype MyData = MyData { unMyData :: Int }
-  deriving newtype (Serializable)
+class Value (RefInstance ref) (ValueType ref) => Ref ref where
+  -- | Type of the value that this ref points to.
+  type ValueType ref :: *
 
--- | Write an instance of the 'Value' class
--- for your data. This allows a 'Ref' instance
--- to refer to your data type.
-instance SimpleValue MyRedisInstance MyData
-instance Value MyRedisInstance MyData
+  -- | RedisM instance this ref points into, with a default.
+  type RefInstance ref :: Instance
+  type RefInstance ref = DefaultInstance
 
--- | Define the 'Ref' instance for your key
--- type.
-instance Ref MyKey where
-  type ValueType MyKey = MyData
-  type RefInstance MyKey = MyRedisInstance
-  toIdentifier MyKey = SviTopLevel "my:key"
-
--- | Store a number in Redis with key "my:key"
-setMyData :: Int -> RedisM MyRedisInstance ()
-setMyData nr = set MyKey (MyData nr)
-
--- | Get a number from Redis with key "my:key"
-getMyData :: RedisM MyRedisInstance (Maybe Int)
-getMyData = fmap unMyData <$> get MyKey
+  -- | How to convert the ref to an identifier that its value accepts.
+  toIdentifier :: ref -> Identifier (ValueType ref)
 ```
+
+A Redis instance can be added by declaring an empty tag type,
+for example as follows:
+
+```haskell
+-- For data that should not get lost
+type InstReliable = Redis.DefaultInstance
+
+-- For throwaway data to speed things up
+data InstCacheLRU
+```
+
+Then a `Redis.Ref` can be placed in the appropriate Redis instance:
+```haskell
+-- This Ref needs to be reliable
+data VisitorCount = VisitorCount
+
+instance Redis.Ref VisitorCount where
+  type ValueType VisitorCount = Integer
+  type RefInstance VisitorCount = InstReliable
+  toIdentifier VisitorCount = "visitor_count"
+
+
+-- This Ref can be evicted as necessary
+data CachedFile = CachedFile FilePath
+
+instance Redis.Ref CachedFile where
+  type ValueType CachedFile = ByteString
+  type RefInstance CachedFile = InstCacheLRU
+  toIdentifier (CachedFile path) = Redis.colonSep ["cached_files", BS.pack path]
+```
+
+Finally, all connections and the Redis monad are tagged
+by the Redis instance, best illustrated by this type signature:
+
+```haskell
+run :: MonadIO m => Pool inst -> RedisM inst a -> m a
+```
+
+There are two consequences.
+First, all operations in a `RedisM` computation must work with the same instance.
+Second, it is practical to have a wrapper function around `run` that automatically
+selects the right connection `Pool` from the environment, based on the Redis instance
+specified in the type of the `RedisM` computation.
 
 ### Meta-records
 

@@ -507,7 +507,7 @@ we did not have to write those, either.
 
 The class `SimpleValue` does not have any methods, and it mostly
 only stands for the list of constraints in its declaration
-(primarily, for the `Serialisable` constraint).
+(primarily, for the `Serializable` constraint).
 `SimpleValue` is a typeclass rather than a constraint alias
 because you may want to have a `Serializable` instance for
 a non-simple `Value`. Thus a `SimpleValue` instance also represents

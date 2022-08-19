@@ -479,8 +479,7 @@ Redis sets, Redis hashes, etc. Simple values include
 integers, floats, text, bytestrings, etc.
 
 Non-simple values are all values that are more complicated than a bytestring,
-and thus will come with restrictions. For example, Redis lists must contain only
-simple values but they themselves are not simple values.
+and thus will come with restrictions. For example, Redis lists are not simple values.
 
 Let's start by discussing simple values.
 
@@ -506,6 +505,15 @@ any wrapping/unwrapping boilerplate, and thanks to
 the default implementations of `Value` methods,
 we did not have to write those, either.
 
+The class `SimpleValue` does not have any methods, and it mostly
+only stands for the list of constraints in its declaration
+(primarily, for the `Serialisable` constraint).
+`SimpleValue` is a typeclass rather than a constraint alias
+because you may want to have a `Serializable` instance for
+a non-simple `Value`. Thus a `SimpleValue` instance also represents
+the intentional declaration that the type in question should be regarded
+as a simple value.
+
 For other types, we need to supply a `Serializable` instance,
 which is, however, often not too hard.
 
@@ -527,6 +535,9 @@ instance Redis.SimpleValue inst Color
 The typeclass `Serializable` is separate from `Show`, `Read`, and `Binary` because:
 * `Show` and `Read` quote strings, and we need the ability to avoid doing it
 * `Binary` does not produce human-readable output and would thus affect the usability of tools like `redis-cli`
+
+Since `redis-schema` is intended to be imported qualified as `Redis`,
+`Redis.Serializable` is an accurate name for the typeclass.
 
 #### Non-simple values
 

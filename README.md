@@ -506,10 +506,6 @@ any wrapping/unwrapping boilerplate, and thanks to
 the default implementations of `Value` methods,
 we did not have to write those, either.
 
-The `SimpleValue` typeclass has no methods and mostly represents only
-the list of constraints in its declaration. We define it as a typeclass
-rather than a constraint alias because 
-
 For other types, we need to supply a `Serializable` instance,
 which is, however, often not too hard.
 
@@ -533,6 +529,33 @@ The typeclass `Serializable` is separate from `Show`, `Read`, and `Binary` becau
 * `Binary` does not produce human-readable output and would thus affect the usability of tools like `redis-cli`
 
 #### Non-simple values
+
+Non-simple values have instances only for `Value`.
+The default implementations of methods of `Value` require a `SimpleValue` instance,
+thus relieving us from defining them whenever a `SimpleValue` instance exists.
+For non-simple values, we have to implement the methods of `Value` manually.
+
+Not all methods of `Value` may make sense for all data types,
+or not all methods may be practically implementable.
+In such casses, it's acceptable to fill the definition with an `error` message.
+
+For example, the `Record` type defined by `redis-schema` does not support
+reading/writing whole records because that would require more type-level
+machinery than we needed at the time.
+
+Another example is the fact that `setTTL` does not make (a lot of)
+sense for values represented by `SviHash`,
+i.e. for values that exist inside a Redis hash, as TTL can be set only for the whole hash.
+Pragmatically, `redis-schema` defaults to silently changing the TTL for the whole hash.
+
+Yet another example are the `PubSub` channels,
+where the operations of `get` and `set` do not make sense.
+
+In all these cases, the "correct" solution would be splitting the `Value`
+typeclass into smaller classes per supported feature so that the availability
+of the individual operations is declared at the type level. We decided to keep
+things simple (if perhaps a bit crude) and use a single `Value` typeclass. This
+may be revisited in the future.
 
 #### Redis instances
 

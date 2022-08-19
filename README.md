@@ -482,9 +482,55 @@ Non-simple values are all values that are more complicated than a bytestring,
 and thus will come with restrictions. For example, Redis lists must contain only
 simple values but they themselves are not simple values.
 
-Let's start discussing simple values.
+Let's start by discussing simple values.
 
 #### Simple values
+
+The easiest case of declaring Redis instances for custom data types
+are newtypes of types that already have Redis instances. For example,
+if your user IDs are textual but you would still like to keep them apart
+from other `Text` data, you could use the following declarations.
+
+```haskell
+{-# LANGUAGE DerivingStrategies #-}
+
+newtype UserId = UserId Text
+  deriving newtype (Redis.Serializable)
+
+instance Redis.Value inst UserId
+instance Redis.SimpleValue inst UserId
+```
+
+Thanks to `deriving newtype`, we did not have to write
+any wrapping/unwrapping boilerplate, and thanks to
+the default implementations of `Value` methods,
+we did not have to write those, either.
+
+The `SimpleValue` typeclass has no methods and mostly represents only
+the list of constraints in its declaration. We define it as a typeclass
+rather than a constraint alias because 
+
+For other types, we need to supply a `Serializable` instance,
+which is, however, often not too hard.
+
+```haskell
+data Color = Red | Green | Blue
+
+instance Redis.Serializable Color where
+  fromBS = Redis.readBS
+  toBS   = Redis.showBS
+
+-- Convenience functions available:
+-- Redis.readBS :: Read val => ByteString -> Maybe val
+-- Redis.showBS :: Show val => val -> ByteString
+
+instance Redis.Value inst Color
+instance Redis.SimpleValue inst Color
+```
+
+The typeclass `Serializable` is separate from `Show`, `Read`, and `Binary` because:
+* `Show` and `Read` quote strings, and we need the ability to avoid doing it
+* `Binary` does not produce human-readable output and would thus affect the usability of tools like `redis-cli`
 
 #### Non-simple values
 

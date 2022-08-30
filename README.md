@@ -63,7 +63,8 @@ More complex data structures, like records, work similarly.
 
 A major goal of `redis-schema` is to provide typed primitives,
 on top of which one can safely and conveniently build further typed libraries,
-such as `Database.Redis.Lock` or `Database.Redis.RemoteJob`.
+such as [`Database.Redis.Lock`](#locks)
+or [`Database.Redis.RemoteJob`](#remote-jobs).
 [Meta-records](#meta-records) are another example of how low-level
 primitives compose into higher-level "primitives" of the same kind.
 
@@ -809,13 +810,24 @@ Consequently, all `Ref`s that make up a meta-record must be linked to the same R
 
 ### Remote jobs
 
-TODO
+Sadly, this library has not been published yet.
+We'd like to, though.
 
 ## Future work
 
-* Rework Maybe (e.g. numeric types never return `Nothing`)
-* `SimpleValue` etc., something can be read/written but not setttled etc.
-* whole records
+* Numeric types in Redis never return `Nothing`; they'll return `Just 0` instead.
+  Perhaps the return types could reflect that somehow.
+
+* Different Redis `Value`s sometimes support different operations, as briefly discussed
+  at [non-simple values](#non-simple-values). We may want to split `Value` into multiple
+  type classes, depending on the supported operations.
+
+* [Records](#records) cannot be read/written as a whole.
+  The only reason is that we did not need it,
+  and thus opted to avoid all the type-level machinery
+  coming with extensible records.
+  However, adopting an established library like `vinyl`
+  as an optional dependency might be worth it.
 
 ## License
 

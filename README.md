@@ -56,7 +56,7 @@ The differences are:
   bespoke ADTs, such as `NumberOfVisitors`.
 * Bespoke reference types eliminate string operations scattered across the code:
   you write `get (NumberOfVisitors today)` instead of
-  `get ("number-of-visitors:" ++ BS.pack (show today))`.
+  `get ("number-of-visitors:" <> BS.pack (show today))`.
   `ByteString` concatenation of course needs to be done somewhere
   but it's implemented only once: in the `toIdentifier` method.
 * The `Ref` instance of that data type determines that
@@ -70,10 +70,10 @@ More complex data structures, like records, work similarly.
 A major goal of `redis-schema` is to provide typed primitives,
 on top of which one can safely and conveniently build further typed libraries,
 such as `Database.Redis.Lock` or `Database.Redis.RemoteJob`.
-[Meta-records](#meta-records) are another example of how lightweight
-"primitives" compose into higher-level "primitives" of the same kind.
+[Meta-records](#meta-records) are another example of how low-level
+primitives compose into higher-level "primitives" of the same kind.
 
-This is reflected in the design decisions of various typeclasses,
+The focus at composability is reflected in the design decisions of various typeclasses,
 and in the design and use of Redis transactions to ensure that
 composability is not broken by race conditions.
 

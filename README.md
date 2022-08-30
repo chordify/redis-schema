@@ -37,10 +37,17 @@ In `redis-schema`, the type of `get` is:
 ```haskell
 get :: Ref ref => ref -> RedisM (RefInstance ref) (Maybe (ValueType ref))
 ```
+and it requires a couple of declarations to go with it:
+```haskell
+data NumberOfVisitors = NumberOfVisitors Date
+instance Ref NumberOfVisitors where
+  type ValueType NumberOfVisitors = Integer
+  {- ... -}
+```
 Instead of `ByteStrings`, `redis-schema` uses references that are usually
-bespoke ADTs, such as `data NumberOfVisitors = NumberOfVisitors Date`,
+bespoke ADTs, such as `NumberOfVisitors`,
 and the `Ref` instance of that data type determines that
-`type ValueType NumberOfVisitors = Integer`.
+the reference stores `Integer`s.
 More complex data structures, like records, work similarly.
 
 ### Composability

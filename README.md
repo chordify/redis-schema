@@ -746,7 +746,7 @@ In Haskell, records can be nested arbitrarily. You can have a record
 that contains some fields alongside another couple of records,
 which themselves contain arbitrarily nested maps and lists of further records.
 
-Redis does not support such arbitrary nesting and being able to
+Redis does not support such arbitrary nesting while being able to
 access and manipulate the inner structures like you would a top-level one
 (e.g. increment a counter deep in the structure).
 However, we can often work around this limitation

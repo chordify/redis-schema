@@ -825,7 +825,7 @@ withExclusiveLock ::
   -> m a
 ```
 
-Another purpose of the library is to demonstrate
+Another purpose of `Database.Redis.Schema.Lock` is to demonstrate
 how a library can be implemented on top of `Database.Redis.Schema`.
 
 ### Remote jobs

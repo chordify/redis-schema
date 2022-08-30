@@ -76,6 +76,7 @@ import Data.ByteString  ( ByteString )
 import Data.Binary      ( Binary, encode, decodeOrFail )
 import Data.Text        ( Text )
 import Data.Text.Encoding ( encodeUtf8, decodeUtf8 )
+import Data.Kind        ( Type )
 import Data.Map         ( Map )
 import Data.Set         ( Set )
 import Data.Int         ( Int64 )
@@ -110,8 +111,8 @@ newtype RedisM inst a = Redis{unRedis :: Hedis.Redis a}
 --   that would require that we index everything with it explicitly,
 --   which would create a lot of syntactic noise.
 --
---   (Ab)using the * kind for instances is a compromise.
-type Instance = *
+--   (Ab)using the Type kind for instances is a compromise.
+type Instance = Type
 
 -- | We also define a default instance.
 --   This is convenient for code bases using only one Redis instance,
@@ -293,7 +294,7 @@ txExpect msg expected = void . txCheckMap f
 -- and declare an empty @instance Value <TheType>@.
 class Value (RefInstance ref) (ValueType ref) => Ref ref where
   -- | Type of the value that this ref points to.
-  type ValueType ref :: *
+  type ValueType ref :: Type
 
   -- | RedisM instance this ref points into, with a default.
   type RefInstance ref :: Instance
@@ -320,7 +321,7 @@ class Value inst val where
   -- Complex values may be identified by something else; for example
   -- 'Tiers.Redis.Profile' is identified by a 'Tiers.Token',
   -- because it's a complex value spread across multiple Redis keys.
-  type Identifier val :: *
+  type Identifier val :: Type
   type Identifier val = SimpleValueIdentifier  -- default
 
 
@@ -714,7 +715,7 @@ colonSep :: [BS.ByteString] -> BS.ByteString
 colonSep = BS.intercalate ":"
 
 infixr 3 :*:
-data Tuple :: [*] -> * where
+data Tuple :: [Type] -> Type where
   Nil :: Tuple '[]
   (:*:) :: a -> Tuple as -> Tuple (a ': as)
 
@@ -730,7 +731,7 @@ instance (Eq a, Eq (Tuple as)) => Eq (Tuple (a ': as)) where
 instance (Ord a, Ord (Tuple as)) => Ord (Tuple (a ': as)) where
   compare (x :*: xs) (y :*: ys) = compare x y <> compare xs ys
 
-class Serializables (as :: [*]) where
+class Serializables (as :: [Type]) where
   encodeSerializables :: Tuple as -> [BS.ByteString]
   decodeSerializables :: [BS.ByteString] -> Maybe (Tuple as)
 
@@ -1108,7 +1109,7 @@ infix 3 :/
 -- If @ref@ is a 'Ref' pointing to a @Map k v@,
 -- then @(ref :/ k)@ is a ref with type @v@,
 -- pointing to the entry in the map identified by @k@.
-data MapItem :: * -> * -> * -> * where
+data MapItem :: Type -> Type -> Type -> Type where
   (:/) :: (Ref ref, ValueType ref ~ Map k v) => ref -> k -> MapItem ref k v
 
   -- Previously, 'MapItem' was defined simply as
@@ -1143,7 +1144,7 @@ infix 3 :.
 data RecordItem ref fieldF val = (:.) ref (fieldF val)
 
 -- | Class of record fields. See 'Record' for details.
-class RecordField (fieldF :: * -> *) where
+class RecordField (fieldF :: Type -> Type) where
   rfToBS :: fieldF a -> ByteString
 
 instance
@@ -1180,7 +1181,7 @@ instance
 --   too much type-level code that noone needs at the moment.
 --
 --  See also: '(:.)'.
-data Record (fieldF :: * -> *)
+data Record (fieldF :: Type -> Type)
 
 -- This is a bit of a hack. Records can't be written at the moment.
 -- Maybe we should split the Value typeclass into ReadWriteValue and Value

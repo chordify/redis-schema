@@ -14,6 +14,8 @@ BEWARE: The documentation is being written.
 
 ### Statically typed schema
 
+#### Hedis
+
 The most common Redis library seems to be
 [Hedis](https://hackage.haskell.org/package/hedis), and `redis-schema` builds
 on top of it. However, consider the type of `get` in Hedis:
@@ -32,6 +34,8 @@ For most use cases, it would be nice if:
   * provides type safety
   * guides programmer, documents structures, etc. -- everything we love about static types
   * it's also immediately clear which instance to use for decoding
+
+#### `redis-schema`
 
 In `redis-schema`, the type of `get` is:
 ```haskell

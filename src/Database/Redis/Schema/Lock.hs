@@ -28,6 +28,7 @@ module Database.Redis.Schema.Lock
 
 import GHC.Generics
 import Data.Functor     ( void )
+import Data.Kind        ( Type )
 import Data.Maybe       ( fromMaybe )
 import Data.Time        ( NominalDiffTime, addUTCTime, getCurrentTime )
 import Data.Set         ( Set )
@@ -149,12 +150,12 @@ instance Redis.Serializable LockSharing where
   fromBS _ = Nothing
 instance Redis.SimpleValue inst LockSharing
 
-data LockFieldName :: * -> * where
+data LockFieldName :: Type -> Type where
   LockFieldSharing :: LockFieldName LockSharing
   LockFieldOwners  :: LockFieldName (Set LockOwnerId)
 
 -- Ref that points to the components of a shareable lock.
-data LockField :: * -> * -> * where
+data LockField :: Type -> Type -> Type where
   LockField :: ByteString -> LockFieldName ty -> LockField inst ty
 
 instance Redis.Value inst ty => Redis.Ref (LockField inst ty) where

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+tocfile="/tmp/toc-$$"
+
 OLDIFS="$IFS"
 IFS=$'\n'
 grep ^## README.md \
@@ -20,5 +22,15 @@ grep ^## README.md \
 
 		echo "$heading" \
 			| sed -r -e "s|\\* (.*)|* [\\1](#${slug})|"
-	done
+	done \
+	> "$tocfile"
 IFS="$OLDIFS"
+
+sed -r -i README.md \
+	-e "/Table of contents/{
+		p
+		r${tocfile}
+		/^#/d
+	}"
+
+rm -f "$tocfile"

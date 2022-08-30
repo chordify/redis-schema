@@ -5,6 +5,38 @@ It strives to provide a solid layer on top of which you can
 correctly build your application or another library.
 
 ## Table of contents
+* [Table of contents](#table-of-contents)
+* [Why `redis-schema`](#why-redis-schema)
+  * [Statically typed schema](#statically-typed-schema)
+    * [Hedis](#hedis)
+    * [`redis-schema`](#redis-schema)
+  * [Composability](#composability)
+* [Tutorial by example](#tutorial-by-example)
+  * [Simple variables](#simple-variables)
+  * [Parameterised references](#parameterised-references)
+  * [Lists, Sets, Hashes, etc.](#lists-sets-hashes-etc)
+  * [Hashes](#hashes)
+    * [Aside: Hashes vs. composite keys](#aside-hashes-vs-composite-keys)
+  * [Records](#records)
+    * [Aside: non-fixed record fields](#aside-non-fixed-record-fields)
+  * [Transactions](#transactions)
+    * [The `Tx` functor](#the-tx-functor)
+    * [Working with transactions](#working-with-transactions)
+    * [What Redis transactions cannot do](#what-redis-transactions-cannot-do)
+    * [Errors in transactions](#errors-in-transactions)
+    * [Monads vs applicative functors](#monads-vs-applicative-functors)
+  * [Exceptions](#exceptions)
+  * [Custom data types](#custom-data-types)
+    * [Simple values](#simple-values)
+    * [Non-simple values](#non-simple-values)
+    * [Redis instances](#redis-instances)
+  * [Meta-records](#meta-records)
+    * [Aside: instances](#aside-instances)
+* [Libraries](#libraries)
+  * [Locks](#locks)
+  * [Remote jobs](#remote-jobs)
+* [Future work](#future-work)
+* [License](#license)
 
 ## Why `redis-schema`
 

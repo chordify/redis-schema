@@ -1,14 +1,8 @@
 # redis-schema
 
-A strongly typed, schema-based Redis library.
-The focus is at composability: providing combinators
-on top of which you can correctly build your application or another library.
-
-Examples of libraries (TODO):
-- Lock
-- Remote Job
-
-BEWARE: The documentation is being written.
+A strongly typed, schema-based, composable Redis library.
+It strives to provide a solid layer, on top of which you can
+correctly build your application or another library.
 
 ## Why `redis-schema`
 

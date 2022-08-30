@@ -67,12 +67,15 @@ More complex data structures, like records, work similarly.
 
 ### Composability
 
-### Transactions
+A major goal of `redis-schema` is to provide typed primitives,
+on top of which one can safely and conveniently build further typed libraries,
+such as `Database.Redis.Lock` or `Database.Redis.RemoteJob`.
+[Meta-records](#meta-records) are another example of how lightweight
+"primitives" compose into higher-level "primitives" of the same kind.
 
-- schema + type-safety
-- composability
-  - especially composability via transactions
-- non-string keys
+This is reflected in the design decisions of various typeclasses,
+and in the design and use of Redis transactions to ensure that
+composability is not broken by race conditions.
 
 ## Tutorial by example
 

@@ -12,21 +12,40 @@ BEWARE: The documentation is being written.
 
 ## Why `redis-schema`
 
+### Statically typed schema
+
 The most common Redis library seems to be
 [Hedis](https://hackage.haskell.org/package/hedis), and `redis-schema` builds
-on top of it. However, consider the type of `set` in Hedis:
+on top of it. However, consider the type of `get` in Hedis:
 
 ```haskell
-set
-:: RedisCtx m f	 
-=> ByteString	
-
-key
--> ByteString	
-
-value
--> m (f Status)
+get
+    :: (RedisCtx m f)
+    => ByteString -- ^ key
+    -> m (f (Maybe ByteString))
 ```
+
+For most use cases, it would be nice if:
+* the value could be decoded from a `ByteString` automatically
+  * provides convenience but also type safety
+* the key could imply the type of the value
+  * provides type safety
+  * guides programmer, documents structures, etc. -- everything we love about static types
+  * it's also immediately clear which instance to use for decoding
+
+In `redis-schema`, the type of `get` is:
+```haskell
+get :: Ref ref => ref -> RedisM (RefInstance ref) (Maybe (ValueType ref))
+```
+Instead of `ByteStrings`, `redis-schema` uses references that are usually
+bespoke ADTs, such as `data NumberOfVisitors = NumberOfVisitors Date`,
+and the `Ref` instance of that data type determines that
+`type ValueType NumberOfVisitors = Integer`.
+More complex data structures, like records, work similarly.
+
+### Composability
+
+### Transactions
 
 - schema + type-safety
 - composability

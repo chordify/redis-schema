@@ -711,21 +711,19 @@ data InstCacheLRU
 
 Then a `Redis.Ref` can be placed in the appropriate Redis instance:
 ```haskell
--- This Ref needs to be reliable
 data VisitorCount = VisitorCount
 
 instance Redis.Ref VisitorCount where
   type ValueType VisitorCount = Integer
-  type RefInstance VisitorCount = InstReliable
+  type RefInstance VisitorCount = InstReliable  -- reliable
   toIdentifier VisitorCount = "visitor_count"
 
 
--- This Ref can be evicted as necessary
 data CachedFile = CachedFile FilePath
 
 instance Redis.Ref CachedFile where
   type ValueType CachedFile = ByteString
-  type RefInstance CachedFile = InstCacheLRU
+  type RefInstance CachedFile = InstCacheLRU  -- evicted as necessary
   toIdentifier (CachedFile path) = Redis.colonSep ["cached_files", BS.pack path]
 ```
 

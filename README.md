@@ -10,9 +10,23 @@ Examples of libraries (TODO):
 
 BEWARE: The documentation is being written.
 
-## Main contributions
+## Why `redis-schema`
 
-("Why `redis-schema` and not something else?)
+The most common Redis library seems to be
+[Hedis](https://hackage.haskell.org/package/hedis), and `redis-schema` builds
+on top of it. However, consider the type of `set` in Hedis:
+
+```haskell
+set
+:: RedisCtx m f	 
+=> ByteString	
+
+key
+-> ByteString	
+
+value
+-> m (f Status)
+```
 
 - schema + type-safety
 - composability
@@ -661,9 +675,11 @@ In Haskell, records can be nested arbitrarily. You can have a record
 that contains some fields alongside another couple of records,
 which themselves contain arbitrarily nested maps and lists of further records.
 
-Redis does not support such arbitrary nesting. However,
-we can often work around this limitation by distributing the datastructure
-over a number of separate Redis keys.
+Redis does not support such arbitrary nesting and being able to
+access and manipulate the inner structures like you would a top-level one
+(e.g. increment a counter deep in the structure).
+However, we can often work around this limitation
+by distributing the datastructure over a number of separate Redis keys.
 For example, consider a case where each visitor should be associated with
 the number of visits, the number of clicks, and the set of their favourite songs.
 Here we can keep the visits+clicks in one record reference per visitor, and the set of favourites

@@ -63,8 +63,8 @@ More complex data structures, like records, work similarly.
 
 A major goal of `redis-schema` is to provide typed primitives,
 on top of which one can safely and conveniently build further typed libraries,
-such as [`Database.Redis.Lock`](#locks)
-or [`Database.Redis.RemoteJob`](#remote-jobs).
+such as [`Database.Redis.Schema.Lock`](#locks)
+or [`Database.Redis.Schema.RemoteJob`](#remote-jobs).
 [Meta-records](#meta-records) are another example of how low-level
 primitives compose into higher-level "primitives" of the same kind.
 
@@ -805,8 +805,28 @@ Consequently, all `Ref`s that make up a meta-record must be linked to the same R
 
 ### Locks
 
-* Exclusive
-* Shared
+Locks are implemented in `Database.Redis.Schema.Lock`.
+The basic type is the exclusive lock; the shared lock is implemented using an exclusive lock.
+Hence the shared lock is also slower, and it's sometimes better to use an exclusive lock,
+even though a shared lock would be sufficient.
+
+The library does not export much API; the main points of interest
+are functions `withExclusiveLock` and `withShareableLock`, which bracket
+a synchronised operation.
+```haskell
+withExclusiveLock ::
+  ( MonadCatch m, MonadThrow m, MonadMask m, MonadIO m
+  , Redis.Ref ref, Redis.ValueType ref ~ ExclusiveLock
+  )
+  => Redis.Pool (Redis.RefInstance ref)
+  -> LockParams  -- ^ Params of the lock, such as timeouts or TTL.
+  -> ref         -- ^ Lock ref
+  -> m a         -- ^ The action to perform under lock
+  -> m a
+```
+
+Another purpose of the library is to demonstrate
+how a library can be implemented on top of `Database.Redis.Schema`.
 
 ### Remote jobs
 

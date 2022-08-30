@@ -835,7 +835,7 @@ We'd like to, though.
 
 ## Future work
 
-* Numeric types in Redis never return `Nothing`; they'll return `Just 0` instead.
+* Reading numeric types in Redis never returns `Nothing`; they'll return `Just 0` instead.
   Perhaps the return types could reflect that somehow.
 
 * Different Redis `Value`s sometimes support different operations, as briefly discussed

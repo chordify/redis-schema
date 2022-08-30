@@ -336,7 +336,8 @@ handleVisit visitorId today = do
 
 Redis does support transactions and `redis-schema` supports them,
 but they are not like SQL transactions, which you may be accustomed to.
-A more suggestive name for Redis transactions might be "atomic operation batches".
+A more suggestive name for Redis transactions might be
+"[mostly](#errors-in-transactions) atomic operation batches".
 
 The main difference between SQL-like transactions and batched Redis transactions
 is that in SQL, you can start a transaction, run a query, receive its output,
@@ -548,7 +549,7 @@ For non-simple values, we have to implement the methods of `Value` manually.
 
 Not all methods of `Value` may make sense for all data types,
 or not all methods may be practically implementable.
-In such casses, it's acceptable to fill the definition with an `error` message.
+In such cases, it's acceptable to fill the definition with an `error` message.
 
 For example, the `Record` type defined by `redis-schema` does not support
 reading/writing whole records because that would require more type-level
@@ -557,7 +558,7 @@ machinery than we needed at the time.
 Another example is the fact that `setTTL` does not make (a lot of)
 sense for values represented by `SviHash`,
 i.e. for values that exist inside a Redis hash, as TTL can be set only for the whole hash.
-Pragmatically, `redis-schema` defaults to silently changing the TTL for the whole hash.
+Pragmatically, `redis-schema` resorts to silently changing the TTL for the whole hash.
 
 Yet another example are the `PubSub` channels,
 where the operations of `get` and `set` do not make sense.
@@ -726,8 +727,8 @@ instance Redis.Value Redis.DefaultInstance VisitorInfo where
 ```
 
 It's a bit of a boilerplate, but now all the scatter/gather code is packed
-in the `Value` instance, it's safe and it composes. Moreover, with small
-let-bound functions, the repetition can be greatly minimised.
+in the `Value` instance, it's safe and it composes. Moreover, using `let`-bound
+shorthand functions for common expressions, the repetition can be greatly minimised.
 
 #### Aside: instances
 
@@ -741,7 +742,7 @@ for `VisitorInfo` accesses Redis refs `VisitorStats` and `FavouriteSongs`,
 and these refs are linked to `DefaultInstance`.
 
 Since every Redis `Ref` must be linked to a specific Redis instance, and cannot be polymorphic
-in the instance,
+in the instance (its purpose is to give a path to the variable, as discussed),
 all meta-records that access them under the hood must be declared for that particular instance.
 Consequently, all `Ref`s that make up a meta-record must be linked to the same Redis instance.
 

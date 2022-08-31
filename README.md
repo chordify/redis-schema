@@ -209,7 +209,9 @@ That does not mean there's absolutely no way to put sets in sets --
 if you encode the inner sets into ByteString, you can nest them however you want.
 However, you will not be able to use functions like `sInsert` or `sDelete`
 to modify the inner sets,
-and you'll have to read/write the entire inner value every time.
+and you'll have to read, modify, and write back the entire inner value every time
+-- and that, besides being inconvenient and inefficient,
+[cannot be done atomically in Redis](#what-redis-transactions-cannot-do).
 
 This is reflected in `redis-schema` by the fact that
 the `SimpleValue` instance is not defined for `Set a`, `Map k v` and `[a]`,

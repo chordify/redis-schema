@@ -89,7 +89,9 @@ The differences are:
   `ByteString` concatenation of course needs to be done somewhere
   but it's implemented only once: in the `toIdentifier` method.
 * References are more abstract than bytestring keys, which improves composability.
-  For example, meta-records [use this abstractness](#aside-references).
+  For example, meta-records [use this abstractness](#aside-references),
+  as a meta-record consists of multiple Redis keys, and thus there's no single bytestring
+  that could reasonably identify it.
 * The `Ref` instance of that data type determines that
   the reference stores `Integer`s. This can be seen
   in the associated type family `ValueType`.

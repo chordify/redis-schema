@@ -31,6 +31,7 @@ correctly build your application or another library.
     * [Non-simple values](#non-simple-values)
     * [Redis instances](#redis-instances)
   * [Meta-records](#meta-records)
+    * [Aside: references](#aside-references)
     * [Aside: instances](#aside-instances)
 * [Libraries](#libraries)
   * [Locks](#locks)
@@ -87,6 +88,8 @@ The differences are:
   `get ("number-of-visitors:" <> BS.pack (show today))`.
   `ByteString` concatenation of course needs to be done somewhere
   but it's implemented only once: in the `toIdentifier` method.
+* References are more abstract than bytestring keys, which improves composability.
+  For example, [meta-records](#aside-references) rely on this abstractness.
 * The `Ref` instance of that data type determines that
   the reference stores `Integer`s. This can be seen
   in the associated type family `ValueType`.
@@ -816,6 +819,32 @@ instance Redis.Value Redis.DefaultInstance VisitorInfo where
 It's a bit of a boilerplate, but now all the scatter/gather code is packed
 in the `Value` instance, it's safe and it composes. Moreover, using `let`-bound
 shorthand functions for common expressions, the repetition can be greatly minimised.
+
+#### Aside: references
+
+A reference to `VisitorInfo` would look as follows.
+```haskell
+data VisitorInfoRef = VisitorInfoFor VisitorId
+
+instance Redis.Ref VisitorInfoRef where
+  type ValueType VisitorInfoRef = VisitorInfo
+  toIdentifier (VisitorInfoFor visitorId) = visitorId
+```
+
+Meta-records show why reference ADTs are more flexible than bytestring keys.
+Since `VisitorInfo` is identified by `VisitorId`, as determined by the associated
+type family `Identifier`, it would be impractical to extract `VisitorId`
+from a `ByteString` reference.
+
+More fundamentally, a meta-record is not associated with any single
+key in Redis so there is no bytestring key to speak of -- and that's why
+we used `VisitorId` to identify the meta-record above instead.
+
+We *could* approach the bytestring as the prefix of all keys that constitute the meta-record
+but that's less flexible than the ADT approach, which lets us extract
+the components of the key and rearrange them as we see fit.
+The optimal arrangement of data in Redis may not coincide with a single
+fixed key prefix.
 
 #### Aside: instances
 

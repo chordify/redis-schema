@@ -74,10 +74,14 @@ instance Redis.SimpleValue inst ExclusiveLock
 -- This is useful mainly for operations that need to be atomic
 -- while manipulating *both* Redis and database (such as various commit scripts).
 --
--- For Redis-only transactions, use 'Redis.atomically'.
--- For database-only transactions, use database transactions.
--- For shareable locks, use 'withShareableLock'.
--- For exclusive locks, 'withExclusiveLock' is more efficient.
+-- * For Redis-only transactions, use 'Redis.atomically'.
+--
+-- * For database-only transactions, use database transactions.
+--
+-- * For shareable locks, use 'withShareableLock'.
+--
+-- * For exclusive locks, 'withExclusiveLock' is more efficient.
+--
 withExclusiveLock ::
   ( MonadCatch m, MonadThrow m, MonadMask m, MonadIO m
   , Redis.Ref ref, Redis.ValueType ref ~ ExclusiveLock
@@ -234,9 +238,11 @@ defaultMetaParams = LockParams
 -- This is useful mainly for operations that need to be atomic
 -- while manipulating *both* Redis and database (such as various commit scripts).
 --
--- For Redis-only transactions, use 'atomically'.
--- For database-only transactions, use database transactions.
--- For exclusive locks, withExclusiveLock is more efficient.
+-- * For Redis-only transactions, use 'atomically'.
+--
+-- * For database-only transactions, use database transactions.
+--
+-- * For exclusive locks, withExclusiveLock is more efficient.
 --
 -- NOTE: the shareable lock seems to have quite a lot of performance overhead.
 -- Always benchmark first whether the exclusive lock would perform better in your scenario,

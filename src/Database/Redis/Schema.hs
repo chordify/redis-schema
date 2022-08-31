@@ -283,8 +283,11 @@ txExpect msg expected = void . txCheckMap f
 -- | Reference to some abstract Redis value.
 --
 -- 'ByteString's are inappropriate for this purpose:
--- * 'Ref's are typed
--- * bytestring concatenation and other faffing is ugly and error-prone
+--
+-- * 'Ref's are typed.
+--
+-- * bytestring concatenation and other faffing is ugly and error-prone.
+--
 -- * some values may be stored across several Redis keys,
 --   (such as Tiers.Redis.Profile),
 --   in which case bytestrings are not even sufficient.

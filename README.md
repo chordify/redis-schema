@@ -854,7 +854,7 @@ Looking back at this instance head:
 ```haskell
 instance Redis.Value Redis.DefaultInstance VisitorInfo where
 ```
-we see that unlike in the usual case, this `Value` instance has been declared specifically
+We see that unlike in the usual case, this `Value` instance has been declared specifically
 for `DefaultInstance`. The reason is that the definition of the `Value` instance
 for `VisitorInfo` accesses Redis refs `VisitorStats` and `FavouriteSongs`,
 and these refs are linked to `DefaultInstance`.

@@ -27,10 +27,10 @@ grep ^## README.md \
 IFS="$OLDIFS"
 
 sed -r -i README.md \
-	-e "/Table of contents/{
+	-e "/^## Table of contents/{
 		p
-		r${tocfile}
 		/^#/d
+		r${tocfile}
 	}"
 
 rm -f "$tocfile"

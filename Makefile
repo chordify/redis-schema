@@ -1,6 +1,18 @@
-all: mktoc
+all: test-stack test-cabal
 
-.PHONY: mktoc
+.PHONY: toc test-stack test-cabal build-stack build-cabal
 
-mktoc:
+build-stack:
+	stack build
+
+test-stack: build-stack
+	stack test
+
+build-cabal:
+	cabal build --enable-tests
+
+test-cabal:
+	cabal test
+
+toc:
 	bash mktoc.sh

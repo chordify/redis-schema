@@ -89,7 +89,7 @@ The differences are:
   `ByteString` concatenation of course needs to be done somewhere
   but it's implemented only once: in the `toIdentifier` method.
 * References are more abstract than bytestring keys, which improves composability.
-  For example, [meta-records](#aside-references) rely on this abstractness.
+  For example, meta-records [use this abstractness](#aside-references).
 * The `Ref` instance of that data type determines that
   the reference stores `Integer`s. This can be seen
   in the associated type family `ValueType`.
@@ -831,7 +831,7 @@ instance Redis.Ref VisitorInfoRef where
   toIdentifier (VisitorInfoFor visitorId) = visitorId
 ```
 
-Meta-records show why reference ADTs are more flexible than bytestring keys.
+Meta-records demonstrate why reference ADTs are more flexible than bytestring keys.
 Since `VisitorInfo` is identified by `VisitorId`, as determined by the associated
 type family `Identifier`, it would be impractical to extract `VisitorId`
 from a `ByteString` reference.
@@ -844,7 +844,7 @@ We *could* approach the bytestring as the prefix of all keys that constitute the
 but that's less flexible than the ADT approach, which lets us extract
 the components of the key and rearrange them as we see fit.
 The optimal arrangement of data in Redis may not coincide with a single
-fixed key prefix.
+fixed bytestring key prefix.
 
 #### Aside: instances
 

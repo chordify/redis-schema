@@ -145,7 +145,7 @@ f pool = Redis.run pool $ do
   setTTL NumberOfVisitors (24 * Redis.hour)
 
   -- atomically increment the number of visitors
-  incrementBy (DailyVisitors today) 1
+  incrementBy NumberOfVisitors 1
 
   -- atomically read and clear (zero) the reference
   -- useful for transactional moves of data

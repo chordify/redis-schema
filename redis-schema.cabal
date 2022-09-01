@@ -34,7 +34,7 @@ library
       src
   default-extensions:
       OverloadedStrings
-  ghc-options: -Wall -O2 -Werror
+  ghc-options: -Wall -O2
   build-depends:
       base >=4.7 && <5
     , binary

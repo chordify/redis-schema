@@ -27,7 +27,7 @@ default-extensions:
 - OverloadedStrings
 
 ghc-options:
-- -Wall -O2 -Werror
+- -Wall -O2
 
 library:
   source-dirs: src

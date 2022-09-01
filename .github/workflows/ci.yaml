@@ -38,4 +38,4 @@ jobs:
           enable-stack: true
           stack-version: "latest"
       - run: |
-          stack build && stack test
+          stack build --pedantic && stack test

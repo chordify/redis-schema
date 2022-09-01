@@ -4,10 +4,10 @@ github:              "chordify/redis-schema"
 license:             BSD3
 author:              "Chordify"
 maintainer:          "haskelldevelopers@chordify.net"
-copyright:           "2021 Chordify"
-synopsis:            Typed, schema-based Redis library
+copyright:           "2022 Chordify"
+synopsis:            Typed, schema-based, composable Redis library
 category:            Database
-description:         Typed, schema-based Redis library
+description:         Typed, schema-based, composable Redis library
 
 dependencies:
 - base >= 4.7 && < 5

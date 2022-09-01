@@ -8,14 +8,14 @@ cabal-version: 1.12
 
 name:           redis-schema
 version:        0.1.0.0
-synopsis:       Typed, schema-based Redis library
-description:    Typed, schema-based Redis library
+synopsis:       Typed, schema-based, composable Redis library
+description:    Typed, schema-based, composable Redis library
 category:       Database
 homepage:       https://github.com/chordify/redis-schema#readme
 bug-reports:    https://github.com/chordify/redis-schema/issues
 author:         Chordify
 maintainer:     haskelldevelopers@chordify.net
-copyright:      2021 Chordify
+copyright:      2022 Chordify
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple

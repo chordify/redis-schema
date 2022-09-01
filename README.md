@@ -1,6 +1,6 @@
 # redis-schema
 
-A strongly typed, schema-based, composable Redis library.
+A typed, schema-based, composable Redis library.
 It strives to provide a solid layer on top of which you can
 correctly build your application or another library.
 

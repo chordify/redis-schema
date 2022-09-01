@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 2a1dbe1077667cb8775d842afbc0afbde243b41377aaed2d9ea0ce9ae032f915
+-- hash: 6e24b5dc9601d0dd0b67efa5f5317cec665a3981cd0065093fca903d437284a5
 
 name:           redis-schema
 version:        0.1.0.0
@@ -37,7 +37,7 @@ library
       src
   default-extensions:
       OverloadedStrings
-  ghc-options: -Wall -O
+  ghc-options: -Wall
   build-depends:
       base >=4.7 && <5
     , binary

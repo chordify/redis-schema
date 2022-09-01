@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 6e24b5dc9601d0dd0b67efa5f5317cec665a3981cd0065093fca903d437284a5
+-- hash: e5c035161723a06e99140a993afdb37730042280641022d1e9854aa86361780b
 
 name:           redis-schema
 version:        0.1.0.0
@@ -13,9 +13,9 @@ description:    Typed, schema-based, composable Redis library
 category:       Database
 homepage:       https://github.com/chordify/redis-schema#readme
 bug-reports:    https://github.com/chordify/redis-schema/issues
-author:         Chordify
+author:         Chordify B.V.
 maintainer:     haskelldevelopers@chordify.net
-copyright:      2022 Chordify
+copyright:      2022 Chordify B.V.
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple

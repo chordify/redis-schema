@@ -2,9 +2,9 @@ name:                redis-schema
 version:             0.1.0.0
 github:              "chordify/redis-schema"
 license:             BSD3
-author:              "Chordify"
+author:              "Chordify B.V."
 maintainer:          "haskelldevelopers@chordify.net"
-copyright:           "2022 Chordify"
+copyright:           "2022 Chordify B.V."
 synopsis:            Typed, schema-based, composable Redis library
 category:            Database
 description:         Typed, schema-based, composable Redis library

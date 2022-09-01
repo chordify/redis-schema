@@ -9,6 +9,10 @@ synopsis:            Typed, schema-based, composable Redis library
 category:            Database
 description:         Typed, schema-based, composable Redis library
 
+extra-source-files:
+- CHANGELOG.md
+- README.md
+
 dependencies:
 - base >= 4.7 && < 5
 - containers
@@ -27,7 +31,7 @@ default-extensions:
 - OverloadedStrings
 
 ghc-options:
-- -Wall -O2
+- -Wall -O
 
 library:
   source-dirs: src

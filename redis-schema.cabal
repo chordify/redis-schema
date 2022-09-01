@@ -1,10 +1,10 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.34.4.
+-- This file has been generated from package.yaml by hpack version 0.34.7.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 325ab5e831645cfee81aa59cc02775904afadf6a9f5fcc73f1d4e33d8a005f07
+-- hash: 2a1dbe1077667cb8775d842afbc0afbde243b41377aaed2d9ea0ce9ae032f915
 
 name:           redis-schema
 version:        0.1.0.0
@@ -19,6 +19,9 @@ copyright:      2022 Chordify
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
+extra-source-files:
+    CHANGELOG.md
+    README.md
 
 source-repository head
   type: git
@@ -34,7 +37,7 @@ library
       src
   default-extensions:
       OverloadedStrings
-  ghc-options: -Wall -O2
+  ghc-options: -Wall -O
   build-depends:
       base >=4.7 && <5
     , binary

@@ -1,5 +1,5 @@
 name:                redis-schema
-version:             0.1.0.0
+version:             0.1.0
 github:              "chordify/redis-schema"
 license:             BSD3
 author:              "Chordify B.V."

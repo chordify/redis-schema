@@ -4,10 +4,10 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: e5c035161723a06e99140a993afdb37730042280641022d1e9854aa86361780b
+-- hash: 8ad979f047b1d31267791ddddc75577141d0b1f972f265c586894ab5f99c498c
 
 name:           redis-schema
-version:        0.1.0.0
+version:        0.1.0
 synopsis:       Typed, schema-based, composable Redis library
 description:    Typed, schema-based, composable Redis library
 category:       Database

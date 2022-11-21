@@ -41,7 +41,7 @@ module Database.Redis.Schema
   , run
   , connect
   , incrementBy, incrementByFloat
-  , txIncrementBy
+  , txIncrementBy, txIncrementByFloat
   , get, set, getSet
   , txGet, txSet, txExpect
   , setWithTTL, setIfNotExists, setIfNotExists_
@@ -502,6 +502,11 @@ txIncrementBy ref val = fmap fromInteger . txWrap $ case toIdentifier ref of
 -- | Increment the value under the given ref.
 incrementByFloat :: (SimpleRef ref, Floating (ValueType ref)) => ref -> Double -> RedisM (RefInstance ref) (ValueType ref)
 incrementByFloat ref val = fmap realToFrac . expectRight "incrementByFloat" =<< case toIdentifier ref of
+  SviTopLevel keyBS -> Hedis.incrbyfloat keyBS val
+  SviHash keyBS hkeyBS -> Hedis.hincrbyfloat keyBS hkeyBS val
+
+txIncrementByFloat :: (SimpleRef ref, Floating (ValueType ref)) => ref -> Double -> Tx (RefInstance ref) (ValueType ref)
+txIncrementByFloat ref val = fmap realToFrac . txWrap $ case toIdentifier ref of
   SviTopLevel keyBS -> Hedis.incrbyfloat keyBS val
   SviHash keyBS hkeyBS -> Hedis.hincrbyfloat keyBS hkeyBS val
 

@@ -56,7 +56,7 @@ module Database.Redis.Schema
   , day, hour, minute, second
   , throw, throwMsg
   , sInsert, sDelete, sContains, sSize
-  , Priority(..), zInsert, zSize, zCount, zDelete, zPopMin, bzPopMin, zRangeByScoreLimit
+  , Priority(..), zInsert, zSize, zCount, zDelete, zIncrBy, zPopMin, bzPopMin, zRangeByScoreLimit, zScanOpts
   , txSInsert, txSDelete, txSContains, txSSize
   , MapItem(..)
   , RecordField(..), RecordItem(..), Record
@@ -1013,6 +1013,14 @@ zCount (toIdentifier -> keyBS) (unPriority -> minScore) (unPriority -> maxScore)
   Redis (Hedis.zcount keyBS minScore maxScore)
     >>= expectRight "zcount"
 
+-- | Increment the value in the sorted set by the given amount. Note that if the value is not present this will add the
+-- the value to the sorted list with the given amount as its priority.
+zIncrBy :: forall ref a. (Ref ref, ValueType ref ~ [(Priority, a)], Serializable a) => ref -> Integer -> a -> RedisM (RefInstance ref) ()
+zIncrBy (toIdentifier -> keyBS) incr (toBS -> val)=
+  Redis (Hedis.zincrby keyBS incr val)
+    >>= expectRight "zincrby"
+    >>= ignore @Double
+
 -- | Remove given number of smallest elements from a sorted set.
 --   Available since Redis 5.0.0
 zPopMin :: forall ref a. (Ref ref, ValueType ref ~ [(Priority, a)], Serializable a) => ref -> Integer -> RedisM (RefInstance ref) [(Priority, a)]
@@ -1055,6 +1063,13 @@ zRangeByScoreLimit (toIdentifier -> keyBS) (Priority minV) (Priority maxV) offse
   Hedis.zrangebyscoreLimit keyBS minV maxV offset limit
   >>= expectRight "zrangebyscoreLimit call"
   >>= expectRight "zrangebyscoreLimit decode" . fromBSMany
+
+-- | Scan the sorted set by reference using an optional match and count.
+zScanOpts :: forall ref a. (Ref ref, ValueType ref ~ [(Priority, a)], Serializable a) => ref -> Maybe Text -> Maybe Integer -> RedisM (RefInstance ref) [a]
+zScanOpts (toIdentifier -> keyBS) mMatch mCount =
+  Redis (Hedis.zscanOpts keyBS Hedis.cursor0 Hedis.ScanOpts { Hedis.scanMatch = toBS <$> mMatch, Hedis.scanCount = mCount})
+    >>= expectRight "zscanOpts call"
+    >>= expectRight "zscanOpts decode" . fromBSMany . map fst . snd
 
 parseMap :: (Ord k, Serializable k, Serializable v)
   => [(ByteString, ByteString)] -> Maybe (Map k v)

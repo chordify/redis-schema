@@ -56,7 +56,7 @@ module Database.Redis.Schema
   , day, hour, minute, second
   , throw, throwMsg
   , sInsert, sDelete, sContains, sSize
-  , Priority(..), zInsert, zSize, zCount, zDelete, zIncrBy, zPopMin, bzPopMin, zRangeByScoreLimit, zRevRange, zScanOpts, zUnionStoreWeights
+  , Priority(..), zInsert, zSize, zCount, zDelete, zIncrBy, zPopMin, bzPopMin, zRangeByScoreLimit, zRange, zRevRange, zScanOpts, zUnionStoreWeights
   , txSInsert, txSDelete, txSContains, txSSize
   , MapItem(..)
   , RecordField(..), RecordItem(..), Record
@@ -1064,6 +1064,13 @@ zRangeByScoreLimit (toIdentifier -> keyBS) (Priority minV) (Priority maxV) offse
   Hedis.zrangebyscoreLimit keyBS minV maxV offset limit
   >>= expectRight "zrangebyscoreLimit call"
   >>= expectRight "zrangebyscoreLimit decode" . fromBSMany
+
+zRange :: forall ref a. (Ref ref, ValueType ref ~ [(Priority, a)], Serializable a)
+          => ref -> Integer -> Integer -> RedisM (RefInstance ref) [a]
+zRange (toIdentifier -> keyBS) start end =
+  Hedis.zrange keyBS start end
+  >>= expectRight "zrange call"
+  >>= expectRight "zrange decode" . fromBSMany
 
 zRevRange :: forall ref a. (Ref ref, ValueType ref ~ [(Priority, a)], Serializable a)
           => ref -> Integer -> Integer -> RedisM (RefInstance ref) [a]

@@ -56,7 +56,7 @@ module Database.Redis.Schema
   , day, hour, minute, second
   , throw, throwMsg
   , sInsert, sDelete, sContains, sSize
-  , Priority(..), zInsert, zSize, zCount, zDelete, zIncrBy, zPopMin, bzPopMin, zRangeByScoreLimit, zRange, zRevRange, zScanOpts, zUnionStoreWeights
+  , Priority(..), zInsert, zSize, zCount, zDelete, zIncrBy, zPopMax, zPopMin, bzPopMin, zRangeByScoreLimit, zRange, zRevRange, zScanOpts, zUnionStoreWeights
   , txSInsert, txSDelete, txSContains, txSSize
   , MapItem(..)
   , RecordField(..), RecordItem(..), Record
@@ -1021,6 +1021,20 @@ zIncrBy (toIdentifier -> keyBS) incr (toBS -> val)=
   Hedis.zincrby keyBS incr val
     >>= expectRight "zincrby"
     <&> Priority
+
+-- | Remove given number of largest elements from a sorted set.
+--   Available since Redis 5.0.0
+zPopMax :: forall ref a. (Ref ref, ValueType ref ~ [(Priority, a)], Serializable a) => ref -> Integer -> RedisM (RefInstance ref) [(Priority, a)]
+zPopMax (toIdentifier -> keyBS) cnt =
+  Redis (zpopmax keyBS cnt)
+  >>= expectRight "zpopmax call"
+  >>= expectRight "zpopmax decode" . fromBSMany'
+  where fromBSMany' = traverse $ \(valBS,sc) -> maybe (Left valBS) (Right . (Priority sc,)) $ fromBS valBS
+
+-- | ZPOPMAX as it should be in the Hedis library (but it isn't yet)
+--   Available since Redis 5.0.0
+zpopmax :: Hedis.RedisCtx m f => ByteString -> Integer -> m (f [(ByteString, Double)])
+zpopmax k c = Hedis.sendRequest ["ZPOPMAX", k, toBS c]
 
 -- | Remove given number of smallest elements from a sorted set.
 --   Available since Redis 5.0.0

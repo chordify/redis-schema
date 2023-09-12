@@ -56,7 +56,7 @@ module Database.Redis.Schema
   , day, hour, minute, second
   , throw, throwMsg
   , sInsert, sDelete, sContains, sSize
-  , Priority(..), zInsert, zSize, zCount, zDelete, zPopMin, bzPopMin, zRangeByScoreLimit
+  , Priority(..), zInsert, zSize, zCount, zDelete, zIncrBy, zPopMax, zPopMin, bzPopMin, zRangeByScoreLimit, zRange, zRevRange, zScanOpts, zUnionStoreWeights
   , txSInsert, txSDelete, txSContains, txSSize
   , MapItem(..)
   , RecordField(..), RecordItem(..), Record
@@ -977,6 +977,7 @@ txSSize ref = txWrap $ Hedis.scard (toIdentifier ref)
 
 -- | Priority for a sorted set
 newtype Priority = Priority { unPriority :: Double }
+  deriving newtype (Eq, Ord, Num, Real, Fractional, RealFrac)
 
 instance Serializable Priority where
   fromBS = fmap Priority . fromBS
@@ -1012,6 +1013,28 @@ zCount :: forall ref a. (Ref ref, ValueType ref ~ [(Priority, a)], Serializable 
 zCount (toIdentifier -> keyBS) (unPriority -> minScore) (unPriority -> maxScore) =
   Redis (Hedis.zcount keyBS minScore maxScore)
     >>= expectRight "zcount"
+
+-- | Increment the value in the sorted set by the given amount. Note that if the value is not present this will add the
+-- the value to the sorted list with the given amount as its priority.
+zIncrBy :: forall ref a. (Ref ref, ValueType ref ~ [(Priority, a)], Serializable a) => ref -> Integer -> a -> RedisM (RefInstance ref) Priority
+zIncrBy (toIdentifier -> keyBS) incr (toBS -> val)=
+  Hedis.zincrby keyBS incr val
+    >>= expectRight "zincrby"
+    <&> Priority
+
+-- | Remove given number of largest elements from a sorted set.
+--   Available since Redis 5.0.0
+zPopMax :: forall ref a. (Ref ref, ValueType ref ~ [(Priority, a)], Serializable a) => ref -> Integer -> RedisM (RefInstance ref) [(Priority, a)]
+zPopMax (toIdentifier -> keyBS) cnt =
+  Redis (zpopmax keyBS cnt)
+  >>= expectRight "zpopmax call"
+  >>= expectRight "zpopmax decode" . fromBSMany'
+  where fromBSMany' = traverse $ \(valBS,sc) -> maybe (Left valBS) (Right . (Priority sc,)) $ fromBS valBS
+
+-- | ZPOPMAX as it should be in the Hedis library (but it isn't yet)
+--   Available since Redis 5.0.0
+zpopmax :: Hedis.RedisCtx m f => ByteString -> Integer -> m (f [(ByteString, Double)])
+zpopmax k c = Hedis.sendRequest ["ZPOPMAX", k, toBS c]
 
 -- | Remove given number of smallest elements from a sorted set.
 --   Available since Redis 5.0.0
@@ -1055,6 +1078,34 @@ zRangeByScoreLimit (toIdentifier -> keyBS) (Priority minV) (Priority maxV) offse
   Hedis.zrangebyscoreLimit keyBS minV maxV offset limit
   >>= expectRight "zrangebyscoreLimit call"
   >>= expectRight "zrangebyscoreLimit decode" . fromBSMany
+
+zRange :: forall ref a. (Ref ref, ValueType ref ~ [(Priority, a)], Serializable a)
+          => ref -> Integer -> Integer -> RedisM (RefInstance ref) [a]
+zRange (toIdentifier -> keyBS) start end =
+  Hedis.zrange keyBS start end
+  >>= expectRight "zrange call"
+  >>= expectRight "zrange decode" . fromBSMany
+
+zRevRange :: forall ref a. (Ref ref, ValueType ref ~ [(Priority, a)], Serializable a)
+          => ref -> Integer -> Integer -> RedisM (RefInstance ref) [a]
+zRevRange (toIdentifier -> keyBS) start end =
+  Hedis.zrevrange keyBS start end
+  >>= expectRight "zrevrange call"
+  >>= expectRight "zrevrange decode" . fromBSMany
+
+-- | Scan the sorted set by reference using an optional match and count.
+zScanOpts :: forall ref a. (Ref ref, ValueType ref ~ [(Priority, a)], Serializable a)
+          => ref -> Maybe Text -> Maybe Integer -> RedisM (RefInstance ref) [a]
+zScanOpts (toIdentifier -> keyBS) mMatch mCount =
+  Hedis.zscanOpts keyBS Hedis.cursor0 Hedis.ScanOpts { Hedis.scanMatch = toBS <$> mMatch, Hedis.scanCount = mCount}
+  >>= expectRight "zscanOpts call"
+  >>= expectRight "zscanOpts decode" . fromBSMany . map fst . snd
+
+zUnionStoreWeights :: forall ref a. (Ref ref, ValueType ref ~ [(Priority, a)], Serializable a) => ref -> [(ref, Double)] -> RedisM (RefInstance ref) ()
+zUnionStoreWeights (toIdentifier -> keyBS) refWithWeights =
+  Hedis.zunionstoreWeights keyBS [(toIdentifier k, d) | (k, d) <- refWithWeights] Hedis.Sum
+  >>= expectRight "zUnionStoreWeights call"
+  >>= ignore @Integer
 
 parseMap :: (Ord k, Serializable k, Serializable v)
   => [(ByteString, ByteString)] -> Maybe (Map k v)

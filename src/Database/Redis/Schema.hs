@@ -133,7 +133,6 @@ data RedisException
   | TransactionAborted
   | TransactionError String
   | CouldNotDecodeValue (Maybe ByteString)
-  | LockAcquireTimeout
   | UnexpectedStatus String Hedis.Status
   | EmptyAlternative  -- for 'instance Alternative Tx'
   deriving (Show, Exception)

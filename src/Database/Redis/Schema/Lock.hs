@@ -23,6 +23,7 @@ module Database.Redis.Schema.Lock
   , defaultMetaParams
   , ExclusiveLock, withExclusiveLock
   , ShareableLock, withShareableLock, LockSharing(..)
+  , LockAcquireTimeout(..)
   )
   where
 
@@ -39,11 +40,17 @@ import qualified Data.ByteString.Char8 as BS
 import System.Random    ( randomIO )
 
 import Control.Concurrent  ( threadDelay, myThreadId )
+import Control.Exception   ( Exception )
 import Control.Monad.Fix   ( fix )
 import Control.Monad.Catch ( MonadThrow(..), MonadCatch(..), MonadMask(..), throwM, finally )
 import Control.Monad.IO.Class ( liftIO, MonadIO )
 
 import qualified Database.Redis.Schema as Redis
+
+data LockAcquireTimeout = LockAcquireTimeout
+  deriving (Show)
+
+instance Exception LockAcquireTimeout
 
 data LockParams = LockParams
   { lpMeanRetryInterval :: NominalDiffTime
@@ -93,7 +100,7 @@ withExclusiveLock ::
   -> m a
 withExclusiveLock redis lp ref action = do
   exclusiveLockAcquire redis lp ref >>= \case
-    Nothing -> throwM Redis.LockAcquireTimeout
+    Nothing -> throwM LockAcquireTimeout
     Just ourId -> action `finally` exclusiveLockRelease redis ref ourId
 
 -- | Acquire a distributed exclusive lock.
@@ -260,7 +267,7 @@ withShareableLock
   -> m a
 withShareableLock redis slp lockSharing ref action =
   shareableLockAcquire redis slp lockSharing ref >>= \case
-    Nothing -> throwM Redis.LockAcquireTimeout
+    Nothing -> throwM LockAcquireTimeout
     Just ourId -> action
       `finally` shareableLockRelease redis slp ref lockSharing ourId
 

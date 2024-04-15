@@ -23,6 +23,8 @@ module Database.Redis.Schema.Lock
   , defaultMetaParams
   , ExclusiveLock, withExclusiveLock
   , ShareableLock, withShareableLock, LockSharing(..)
+  , ExclusiveLockAcquireTimeout(..)
+  , ShareableLockAcquireTimeout(..)
   )
   where
 
@@ -39,23 +41,48 @@ import qualified Data.ByteString.Char8 as BS
 import System.Random    ( randomIO )
 
 import Control.Concurrent  ( threadDelay, myThreadId )
+import Control.Exception   ( Exception )
 import Control.Monad.Fix   ( fix )
 import Control.Monad.Catch ( MonadThrow(..), MonadCatch(..), MonadMask(..), throwM, finally )
 import Control.Monad.IO.Class ( liftIO, MonadIO )
 
 import qualified Database.Redis.Schema as Redis
 
+data ExclusiveLockAcquireTimeout = ExclusiveLockAcquireTimeout
+  { elatRefIdentifier :: Redis.SimpleValueIdentifier
+  , elatLockParams :: LockParams
+  , elatOurId :: LockOwnerId
+  }
+  deriving stock (Show)
+
+instance Exception ExclusiveLockAcquireTimeout
+
+data ShareableLockAcquireTimeout = ShareableLockAcquireTimeout
+  { slatRefIdentifier :: ByteString
+  , slatLockParams :: ShareableLockParams
+  , slatSharing :: LockSharing
+  , slatOurId :: LockOwnerId
+  }
+  deriving stock (Show)
+
+instance Exception ShareableLockAcquireTimeout
+
 data LockParams = LockParams
   { lpMeanRetryInterval :: NominalDiffTime
   , lpAcquireTimeout    :: NominalDiffTime
   , lpLockTTL           :: Redis.TTL
   }
+  deriving stock (Show)
 
 -- | ID of the process that owns the Redis lock.
 newtype LockOwnerId = LockOwnerId { _unLockOwnerId :: ByteString }
+  deriving stock (Show)
   deriving newtype (Eq, Ord, Redis.Serializable)
 instance Redis.Value inst LockOwnerId
 instance Redis.SimpleValue inst LockOwnerId
+
+data AcquireResult = Acquired | AcquireTimeout
+  deriving stock (Show)
 
 --------------------
 -- Exclusive lock --
@@ -82,6 +109,9 @@ instance Redis.SimpleValue inst ExclusiveLock
 --
 -- * For exclusive locks, 'withExclusiveLock' is more efficient.
 --
+-- This throws 'ExclusiveLockAcquireTimeout' if we fail to acquire the lock before the
+-- timeout specified in the 'LockParams'.
+--
 withExclusiveLock ::
   ( MonadCatch m, MonadThrow m, MonadMask m, MonadIO m
   , Redis.Ref ref, Redis.ValueType ref ~ ExclusiveLock
@@ -92,9 +122,14 @@ withExclusiveLock ::
   -> m a         -- ^ The action to perform under lock
   -> m a
 withExclusiveLock redis lp ref action = do
-  exclusiveLockAcquire redis lp ref >>= \case
-    Nothing -> throwM Redis.LockAcquireTimeout
-    Just ourId -> action `finally` exclusiveLockRelease redis ref ourId
+  (result, ourId) <- exclusiveLockAcquire redis lp ref
+  case result of
+    AcquireTimeout -> throwM ExclusiveLockAcquireTimeout
+      { elatRefIdentifier = Redis.toIdentifier ref
+      , elatLockParams = lp
+      , elatOurId = ourId
+      }
+    Acquired -> action `finally` exclusiveLockRelease redis ref ourId
 
 -- | Acquire a distributed exclusive lock.
 -- Returns Nothing on timeout. Otherwise it returns the unique client ID used for the lock.
@@ -102,7 +137,7 @@ exclusiveLockAcquire ::
   ( MonadCatch m, MonadThrow m, MonadMask m, MonadIO m
   , Redis.Ref ref, Redis.ValueType ref ~ ExclusiveLock
   )
-  => Redis.Pool (Redis.RefInstance ref) -> LockParams -> ref -> m (Maybe LockOwnerId)
+  => Redis.Pool (Redis.RefInstance ref) -> LockParams -> ref -> m (AcquireResult, LockOwnerId)
 exclusiveLockAcquire redis lp ref = do
   -- this is unique only if we have only one instance of HConductor running
   ourId <- LockOwnerId . BS.pack . show <$> liftIO myThreadId  -- unique client id
@@ -110,13 +145,13 @@ exclusiveLockAcquire redis lp ref = do
   fix $ \ ~retry -> do  -- ~ makes the lambda lazy
     tsNow <- liftIO getCurrentTime
     if tsNow >= tsDeadline
-      then return Nothing  -- didn't manage to acquire the lock before timeout
+      then return (AcquireTimeout, ourId)  -- didn't manage to acquire the lock before timeout
       else do
         -- set the lock if it does not exist
         didNotExist <- Redis.run redis $
           Redis.setIfNotExistsTTL ref (ExclusiveLock ourId) (lpLockTTL lp)
         if didNotExist
-          then return (Just ourId)  -- everything went well
+          then return (Acquired, ourId)  -- everything went well
           else do
             -- someone got there first; wait a bit and try again
             fuzzySleep (lpMeanRetryInterval lp)
@@ -225,6 +260,7 @@ data ShareableLockParams = ShareableLockParams
   { slpParams :: LockParams
   , slpMetaParams :: LockParams
   }
+  deriving (Show)
 
 defaultMetaParams :: LockParams
 defaultMetaParams = LockParams
@@ -244,6 +280,9 @@ defaultMetaParams = LockParams
 --
 -- * For exclusive locks, withExclusiveLock is more efficient.
 --
+-- This throws 'ShareableLockAcquireTimeout' if we fail to acquire the lock before the
+-- timeout specified in the 'ShareableLockParams'.
+--
 -- NOTE: the shareable lock seems to have quite a lot of performance overhead.
 -- Always benchmark first whether the exclusive lock would perform better in your scenario,
 -- even when a shareable lock would be sufficient in theory.
@@ -258,18 +297,24 @@ withShareableLock
   -> ref         -- ^ Lock ref
   -> m a         -- ^ The action to perform under lock
   -> m a
-withShareableLock redis slp lockSharing ref action =
-  shareableLockAcquire redis slp lockSharing ref >>= \case
-    Nothing -> throwM Redis.LockAcquireTimeout
-    Just ourId -> action
-      `finally` shareableLockRelease redis slp ref lockSharing ourId
+withShareableLock redis slp lockSharing ref action = do
+  (result, ourId) <- shareableLockAcquire redis slp lockSharing ref
+  case result of
+    AcquireTimeout -> throwM ShareableLockAcquireTimeout
+      { slatRefIdentifier = Redis.toIdentifier ref
+      , slatLockParams = slp
+      , slatSharing = lockSharing
+      , slatOurId = ourId
+      }
+    Acquired ->
+      action `finally` shareableLockRelease redis slp ref lockSharing ourId
 
 shareableLockAcquire ::
   forall m ref.
   ( MonadCatch m, MonadThrow m, MonadMask m, MonadIO m
   , Redis.Ref ref, Redis.ValueType ref ~ ShareableLock
   , Redis.SimpleValue (Redis.RefInstance ref) (MetaLock ref)
-  ) => Redis.Pool (Redis.RefInstance ref) -> ShareableLockParams -> LockSharing -> ref -> m (Maybe LockOwnerId)
+  ) => Redis.Pool (Redis.RefInstance ref) -> ShareableLockParams -> LockSharing -> ref -> m (AcquireResult, LockOwnerId)
 shareableLockAcquire redis slp lockSharing ref = do
   -- this is unique only if we have only one instance of HConductor running
   ourId <- LockOwnerId . BS.pack . show <$> liftIO myThreadId  -- unique client id
@@ -277,7 +322,7 @@ shareableLockAcquire redis slp lockSharing ref = do
   fix $ \ ~retry -> do  -- ~ makes the lambda lazy
     tsNow <- liftIO getCurrentTime
     if tsNow >= tsDeadline
-      then return Nothing  -- didn't manage to acquire the lock before timeout
+      then return (AcquireTimeout, ourId)  -- didn't manage to acquire the lock before timeout
       else do
         -- acquire the lock if possible, using the meta lock to synchronise access
         success <- withExclusiveLock redis (slpMetaParams slp) (MetaLock ref) $
@@ -304,7 +349,7 @@ shareableLockAcquire redis slp lockSharing ref = do
           then do
             -- everything went well, set ttl and return
             Redis.run redis $ Redis.setTTL ref (lpLockTTL $ slpParams slp)
-            return (Just ourId)
+            return (Acquired, ourId)
           else do
             -- someone got there first; wait a bit and try again
             fuzzySleep $ lpMeanRetryInterval (slpParams slp)

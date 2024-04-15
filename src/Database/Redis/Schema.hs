@@ -133,13 +133,13 @@ data RedisException
   | TransactionAborted
   | TransactionError String
   | CouldNotDecodeValue (Maybe ByteString)
-  | LockAcquireTimeout
   | UnexpectedStatus String Hedis.Status
   | EmptyAlternative  -- for 'instance Alternative Tx'
   deriving (Show, Exception)
 
 -- | Time-To-Live for Redis values. The Num instance works in (integral) seconds.
 newtype TTL = TTLSec { ttlToSeconds :: Integer }
+  deriving stock (Show)
   deriving newtype (Eq, Ord, Num)
 
 run :: MonadIO m => Pool inst -> RedisM inst a -> m a
@@ -403,6 +403,7 @@ class Value inst val where
 data SimpleValueIdentifier
   = SviTopLevel ByteString         -- ^ Stored in a top-level key.
   | SviHash ByteString ByteString  -- ^ Stored in a hash field.
+  deriving stock (Show)
 
 -- | Simple values, like strings, integers or enums,
 -- that be represented as a single bytestring.

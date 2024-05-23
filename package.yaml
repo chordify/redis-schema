@@ -21,6 +21,7 @@ dependencies:
 - bytestring
 - time
 - mtl
+- monadIO
 - random
 - exceptions
 - hedis

@@ -894,8 +894,79 @@ how a library can be implemented on top of `Database.Redis.Schema`.
 
 ### Remote jobs
 
-Sadly, this library has not been published yet.
-We'd like to, though.
+In `Database.Redis.Schema.RemoteJob` a Redis-based worker queue is implemented, to run CPU
+intensive jobs on remote machines. The queue is strongly typed, and can contain multiple
+different jobs to be executed, with priorities, that workers can pick up.
+
+As an example, we define a queue that can contain three types of jobs:
+```haskell
+newtype ComputeFactorial = CF Integer deriving ( Binary )
+newtype ComputeSquare    = CS Integer deriving ( Binary )
+
+data MyQueue
+instance JobQueue MyQueue where
+  type RPC MyQueue =
+    '[ ComputeFactorial -> Integer
+     , ComputeSquare -> Integer
+     , String -> String
+     ]
+  keyPrefix = "myqueue"
+```
+Here the `MyQueue` type is used only during compile time to let the compile find the right
+instances. To distinguish between the two `Integer -> Integer` functions, we wrap them in
+newtypes. A `Binary` instance must exist for all inputs and outputs, so that they can be put
+into Redis.
+
+Based on this queue, we can now define a worker that executes the jobs. This worker must
+define a function for each the the types in `RPC`, and runs in a monadic context (which
+we fixed to `IO` for the example).
+
+```haskell
+fac :: ComputeFactorial -> IO Integer
+fac (CF n) = do
+  putStrLn $ "Computing the factorial of " ++ show n
+  pure $ product [1..n]
+
+sm :: ComputeSquare -> IO Integer
+sm (CS n) = pure $ n * n
+
+runWorker :: IO ()
+runWorker = do
+  pool <- connect "redis:///" 10
+  let myId = "localworker"
+  let err e = error $ "Something went wrong: " ++ show e
+  remoteJobWorker @MyQueue myId pool err fac sm (pure . reverse)
+```
+The arguments to `remoteJobWorker` are a unique identifier for this worker (for counting
+the workers, executing jobs will work fine even with overlapping ids), a connection pool,
+a logging function for exceptions, and then for each element in `RPC` the right function.
+
+Now if we call `runWorker` it will block until work needs to be done, and it will never
+return except when an async exception is thrown. In production cases it is adviced to use
+`withRemoteJobWorker` instead, which forks off a worker thread and provides a `WorkerHandle`
+to it's continuation, which can be passed to `gracefulShutdown` to handle the currently
+running job and then gracefully return.
+
+Now from another process or even other machine we can 'execute jobs', e.g. add them to the
+queue and synchronously wait for their result. For example:
+```haskell
+runJobs :: IO ()
+runJobs = do
+  pool <- connect "redis:///" 10
+  a <- runRemoteJob @MyQueue @String @String False pool 1 "test"
+  print a
+  b <- runRemoteJob @MyQueue @ComputeFactorial @Integer False pool 1 (CF 5)
+  print b
+```
+This will print:
+```ghci> runJobs
+Right "tset"
+Right 120
+```
+The underlying Redis implementation is based on blocking reads from sorted sets (`BZPOPMIN`),
+which is concurrency safe and no polling is needed. An arbitrary amount of workers can be run
+and jobs can be executed from arbitrary machines. Only the `countWorkers` implementation
+is based on a keep-alive loop on the workers, to properly deal with TCP connection losses.
 
 ## Future work
 

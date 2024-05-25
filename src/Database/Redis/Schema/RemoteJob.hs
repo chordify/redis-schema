@@ -143,7 +143,7 @@ instance FindHandler i o xs => FindHandler' i o (x ': xs) 'False where
   handlerIdx' _ _ _ = 1 + handlerIdx (Proxy @(i -> o)) (Proxy @xs)
 
 type family IsHead (x :: Type) (xs :: [Type]) :: Bool where
-  IsHead x (x ': _) = True
+  IsHead x (x ': _) = 'True
   IsHead x _        = 'False
 
 

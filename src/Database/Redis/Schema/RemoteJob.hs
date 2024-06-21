@@ -91,12 +91,24 @@ class JobQueue jq where
   type RedisInstance jq :: Instance
   type RedisInstance jq = DefaultInstance
 
+
+-- | Type for representing a job request in Redis
+data Job = Job
+  { jobId         :: UUID
+  , jobHandlerIdx :: Int
+  , jobInput      :: BSL.ByteString
+  } deriving ( Eq, Ord )
+
+instance Serializable Job where
+  toBS j = toBS (jobId j, jobHandlerIdx j, jobInput j)
+  fromBS = fmap (\(jid,jidx,jinp) -> Job jid jidx jinp) . fromBS
+
 -- | This queue contains many requests.
 -- There is only one request queue and it's read by all workers.
 data RequestQueue jq = RequestQueue
 instance JobQueue jq => Ref (RequestQueue jq) where
   type RefInstance (RequestQueue jq) = RedisInstance jq
-  type ValueType (RequestQueue jq) = [(Priority, (UUID, Int, BSL.ByteString))]
+  type ValueType (RequestQueue jq) = [(Priority, Job)]
   toIdentifier RequestQueue =
     colonSep [keyPrefix @jq, "requests"]
 
@@ -104,7 +116,7 @@ instance JobQueue jq => Ref (RequestQueue jq) where
 data RunningJobs jq = RunningJobs
 instance JobQueue jq => Ref (RunningJobs jq) where
   type RefInstance (RunningJobs jq) = RedisInstance jq
-  type ValueType (RunningJobs jq) = Set.Set (WorkerId, (UUID, Int, BSL.ByteString))
+  type ValueType (RunningJobs jq) = Set.Set (WorkerId, Job)
   toIdentifier RunningJobs =
     colonSep [keyPrefix @jq, "running"]
 
@@ -127,19 +139,19 @@ instance JobQueue jq => Ref (Workers jq) where
 
 -- | Type class to check where in the 'RPC' list a i->o job occurs, which
 --   is then used together with 'CanHandle' to use the right handler.
-class FindHandler (i :: Type) (o :: Type) (xs :: [Type]) where
+class HasHandler (i :: Type) (o :: Type) (xs :: [Type]) where
   handlerIdx :: Proxy (i -> o) -> Proxy xs -> Int
 
-instance (FindHandler' i o xs (IsHead (i -> o) xs)) => FindHandler i o xs where
+instance (HasHandler' i o xs (IsHead (i -> o) xs)) => HasHandler i o xs where
   handlerIdx = handlerIdx' (Proxy @(IsHead (i -> o) xs))
 
-class FindHandler' (i :: Type) (o :: Type) (xs :: [Type]) (isHead :: Bool) where
+class HasHandler' (i :: Type) (o :: Type) (xs :: [Type]) (isHead :: Bool) where
   handlerIdx' :: Proxy isHead -> Proxy (i -> o) -> Proxy xs -> Int
 
-instance FindHandler' i o ((i -> o) ': xs) 'True where
+instance HasHandler' i o ((i -> o) ': xs) 'True where
   handlerIdx' _ _ _ = 0
 
-instance FindHandler i o xs => FindHandler' i o (x ': xs) 'False where
+instance HasHandler i o xs => HasHandler' i o (x ': xs) 'False where
   handlerIdx' _ _ _ = 1 + handlerIdx (Proxy @(i -> o)) (Proxy @xs)
 
 type family IsHead (x :: Type) (xs :: [Type]) :: Bool where
@@ -170,7 +182,7 @@ instance (Monad m, Binary i, Binary o, CanHandle m xs) => CanHandle m ((i -> o) 
 --   task. The 'Double' argument is the priority, jobs with a lower priority are picked up earlier.
 runRemoteJob ::
   forall q i o m.
-  (MonadCatch m, MonadIO m, JobQueue q, FindHandler i o (RPC q), Binary i, Binary o) =>
+  (MonadCatch m, MonadIO m, JobQueue q, HasHandler i o (RPC q), Binary i, Binary o) =>
   Bool -> Pool (RedisInstance q) -> Priority -> i -> m (Either RemoteJobError o)
 runRemoteJob waitForWorkers pool prio a = do
   -- Check that there are active workers
@@ -182,15 +194,19 @@ runRemoteJob waitForWorkers pool prio a = do
   if abort then return $ Left NoActiveWorkers
   else do
     -- Add the job
-    jobId <- liftIO nextRandom
-    let job = (jobId, handlerIdx (Proxy @(i -> o)) (Proxy @(RPC q)), encode a)
+    jid <- liftIO nextRandom
+    let job = Job
+          { jobId = jid
+          , jobHandlerIdx = handlerIdx (Proxy @(i -> o)) (Proxy @(RPC q))
+          , jobInput = encode a
+          }
 
     -- Add to the queue and wait for the result. If any exception occurs at this point
     -- (which is then likely an async exception), we remove the element from the queue,
     -- because we will not listen to the result anymore anyway.
     popResult <- run pool
       ( do zInsert (RequestQueue @q) [(prio,job)]
-           lPopRightBlocking 0 (ResultBox @q jobId)
+           lPopRightBlocking 0 (ResultBox @q jid)
       ) `onException`
       run pool (zDelete (RequestQueue @q) job)
 
@@ -204,12 +220,16 @@ runRemoteJob waitForWorkers pool prio a = do
 --   up this task.
 runRemoteJobAsync ::
   forall q i m.
-  (MonadCatch m, MonadIO m, JobQueue q, FindHandler i () (RPC q), Binary i) =>
+  (MonadCatch m, MonadIO m, JobQueue q, HasHandler i () (RPC q), Binary i) =>
   Pool (RedisInstance q) -> Priority -> i -> m ()
 runRemoteJobAsync pool prio a = do
   -- Add to the queue and forget about it.
-  jobId <- liftIO nextRandom
-  let job = (jobId, handlerIdx (Proxy @(i -> ())) (Proxy @(RPC q)), encode a)
+  jid <- liftIO nextRandom
+  let job = Job
+        { jobId = jid
+        , jobHandlerIdx = handlerIdx (Proxy @(i -> ())) (Proxy @(RPC q))
+        , jobInput = encode a
+        }
   run pool $ zInsert (RequestQueue @q) [(prio,job)]
 
 -- | The actual worker loop, this generalizes over 'remoteJobWorker' and 'forkRemoteJobWorker'
@@ -224,14 +244,14 @@ remoteJobWorker' cont wid pool logger = doHandle (Proxy @m) (Proxy @(RPC q)) $ \
     -- Main loop, pop elements from the queue and handle them
     loop :: m ()
     loop = run pool (bzPopMin (RequestQueue @q) 0) >>= \case
-      Just (_, it@(jobId, idx, bsa)) -> do
+      Just (_, job) -> do
         -- Update the RunningJobs queue at the start and end of this block,
         -- and keep the workerFree var up to date
         bracket_
-          (run pool (sInsert (RunningJobs @q) [(wid,it)]) >> liftIO (takeMVar workerFree))
-          (run pool (sDelete (RunningJobs @q) [(wid,it)]) >> liftIO (putMVar workerFree ())) $ do
+          (run pool (sInsert (RunningJobs @q) [(wid,job)]) >> liftIO (takeMVar workerFree))
+          (run pool (sDelete (RunningJobs @q) [(wid,job)]) >> liftIO (putMVar workerFree ())) $ do
             -- Call the actual handler
-            resp <- fmap Right (handler idx bsa)
+            resp <- fmap Right (handler (jobHandlerIdx job) (jobInput job))
                     `catchAll`
                     (return . Left)
 
@@ -240,7 +260,7 @@ remoteJobWorker' cont wid pool logger = doHandle (Proxy @m) (Proxy @(RPC q)) $ \
                   Left e  -> Left $ RemoteJobException $ show e
                   Right b -> Right b
             run pool $ do
-              let box = ResultBox @q jobId
+              let box = ResultBox @q (jobId job)
               lPushLeft box [bso]
               -- set ttl to ensure the data is not left behind in case of crashes,
               -- the caller should be awaiting this already, so it's either read

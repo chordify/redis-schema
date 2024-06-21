@@ -912,7 +912,7 @@ instance JobQueue MyQueue where
      ]
   keyPrefix = "myqueue"
 ```
-Here the `MyQueue` type is used only during compile time to let the compile find the right
+Here the `MyQueue` type is used only during compile time to let the compiler find the right
 instances. To distinguish between the two `Integer -> Integer` functions, we wrap them in
 newtypes. A `Binary` instance must exist for all inputs and outputs, so that they can be put
 into Redis.

@@ -1,10 +1,10 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.34.7.
+-- This file has been generated from package.yaml by hpack version 0.35.0.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 8ad979f047b1d31267791ddddc75577141d0b1f972f265c586894ab5f99c498c
+-- hash: 1876630159ac153904237e5ab7ec2b440a07213ac8ca4b6420a02fff46e1524d
 
 name:           redis-schema
 version:        0.1.0
@@ -31,6 +31,7 @@ library
   exposed-modules:
       Database.Redis.Schema
       Database.Redis.Schema.Lock
+      Database.Redis.Schema.RemoteJob
   other-modules:
       Paths_redis_schema
   hs-source-dirs:
@@ -45,6 +46,7 @@ library
     , containers
     , exceptions
     , hedis
+    , monadIO
     , mtl
     , numeric-limits
     , random

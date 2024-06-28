@@ -29,6 +29,7 @@ module Database.Redis.Schema.RemoteJob (
   gracefulShutdown,
 
   -- * Inspection
+  countWorkers,
   queueLength,
   countRunningJobs,
 ) where

@@ -332,8 +332,8 @@ class Value inst val where
   txValGet :: Identifier val -> Tx inst (Maybe val)
 
   default txValGet :: SimpleValue inst val => Identifier val -> Tx inst (Maybe val)
-  txValGet (SviTopLevel keyBS) = fmap (fromBS =<<) . txWrap $ Hedis.get keyBS
-  txValGet (SviHash keyBS hkeyBS) = fmap (fromBS =<<) . txWrap $ Hedis.hget keyBS hkeyBS
+  txValGet (SviTopLevel keyBS) = txFromBSOrThrow $ txWrap (Hedis.get keyBS)
+  txValGet (SviHash keyBS hkeyBS) = txFromBSOrThrow $ txWrap (Hedis.hget keyBS hkeyBS)
 
   -- | Write a value to Redis in a transaction.
   txValSet :: Identifier val -> val -> Tx inst ()
@@ -367,10 +367,10 @@ class Value inst val where
   valGet :: Identifier val -> RedisM inst (Maybe val)
 
   default valGet :: SimpleValue inst val => Identifier val -> RedisM inst (Maybe val)
-  valGet (SviTopLevel keyBS) =
-    fmap (fromBS =<<) . expectRight "valGet/plain" =<< Hedis.get keyBS
-  valGet (SviHash keyBS hkeyBS) =
-    fmap (fromBS =<<) . expectRight "valGet/hash" =<< Hedis.hget keyBS hkeyBS
+  valGet ident = do
+    traverse fromBSOrThrow =<< expectRight "valGet" =<< case ident of
+      SviTopLevel keyBS -> Hedis.get keyBS
+      SviHash keyBS hkeyBS -> Hedis.hget keyBS hkeyBS
 
   -- | Write a value.
   valSet :: Identifier val -> val -> RedisM inst ()
@@ -451,8 +451,9 @@ txTake ref = txGet ref <* txDelete_ ref
 getSet :: forall ref. SimpleRef ref => ref -> ValueType ref -> RedisM (RefInstance ref) (Maybe (ValueType ref))
 getSet ref val = case toIdentifier ref of
   SviTopLevel keyBS ->
-    fmap (fromBS =<<) . expectRight "getSet/plain"
-      =<< Hedis.getset keyBS (toBS val)
+    Hedis.getset keyBS (toBS val)
+    >>= expectRight "getSet"
+    >>= traverse fromBSOrThrow
 
   -- no native Redis call for this
   SviHash _ _ -> atomically (txGet ref <* txSet ref val)
@@ -567,6 +568,21 @@ watch ref = case toIdentifier ref of
 -- and does not affect other connections. Nothing else would make much sense.
 unwatch :: RedisM inst ()
 unwatch = Redis Hedis.unwatch >>= expect "unwatch: OK expected" (Right Hedis.Ok)
+
+fromBSOrThrow :: Serializable val => ByteString -> RedisM inst val
+fromBSOrThrow bs = case fromBS bs of
+  Nothing -> throw $ CouldNotDecodeValue (Just bs)
+  Just val -> pure val
+
+-- Tx is not Traversable so it's tricky to decouple the handling
+-- of missing values from the handling of other exceptions.
+-- This function does both to keep things simple.
+txFromBSOrThrow :: Serializable val => Tx inst (Maybe ByteString) -> Tx inst (Maybe val)
+txFromBSOrThrow = txCheckMap $ \case
+    Nothing -> Right Nothing  -- item not present
+    Just bs -> case fromBS bs of
+      Nothing -> Left $ CouldNotDecodeValue (Just bs)
+      Just val -> Right (Just val)
 
 -- | Decode a list of ByteStrings.
 -- On failure, return the first ByteString that could not be decoded.
@@ -868,7 +884,8 @@ lPushLeft (toIdentifier -> keyBS) vals =
 lPopRight :: forall ref a. (Ref ref, ValueType ref ~ [a], Serializable a) => ref -> RedisM (RefInstance ref) (Maybe a)
 lPopRight (toIdentifier -> keyBS) =
   Redis (Hedis.rpop keyBS)
-  >>= fmap (fromBS =<<) . expectRight "rpop"
+  >>= expectRight "rpop"
+  >>= traverse fromBSOrThrow
 
 -- | Pop from the right, blocking.
 lPopRightBlocking :: forall ref a. (Ref ref, ValueType ref ~ [a], Serializable a) => TTL -> ref -> RedisM (RefInstance ref) (Maybe a)
@@ -877,10 +894,7 @@ lPopRightBlocking (TTLSec timeoutSec) (toIdentifier -> keyBS) =
     >>= expectRight "brpop"
     >>= \case
       Nothing -> pure Nothing -- timeout
-      Just (_listName, valBS) ->
-        case fromBS valBS of
-          Just val -> pure $ Just val
-          Nothing -> throw $ CouldNotDecodeValue (Just valBS)
+      Just (_listName, valBS) -> Just <$> fromBSOrThrow valBS
 
 -- | Delete from a Redis list
 lRem :: forall ref a. (Ref ref, ValueType ref ~ [a], Serializable a) => ref -> Integer -> a -> RedisM (RefInstance ref) ()

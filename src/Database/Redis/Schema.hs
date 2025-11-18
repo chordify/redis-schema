@@ -368,9 +368,9 @@ class Value inst val where
 
   default valGet :: SimpleValue inst val => Identifier val -> RedisM inst (Maybe val)
   valGet (SviTopLevel keyBS) =
-    fmap (fromBS =<<) . expectRight "valGet/plain" =<< Hedis.get keyBS
+    (traverse fromBSorThrow <=< expectRight "valGet/plain") =<< Hedis.get keyBS
   valGet (SviHash keyBS hkeyBS) =
-    fmap (fromBS =<<) . expectRight "valGet/hash" =<< Hedis.hget keyBS hkeyBS
+    (traverse fromBSorThrow <=< expectRight "valGet/hash") =<< Hedis.hget keyBS hkeyBS
 
   -- | Write a value.
   valSet :: Identifier val -> val -> RedisM inst ()
@@ -399,6 +399,10 @@ class Value inst val where
     expectRight "valSetTTLIfExists/plain" =<< Hedis.expire keyBS ttlSec
   valSetTTLIfExists (SviHash keyBS _hkeyBS) (TTLSec ttlSec) =
     expectRight "valSetTTLIfExists/hash" =<< Hedis.expire keyBS ttlSec
+
+-- | Ensure the fromBS conversation does not fail silently due to a change of the internal Haskell ValueType of a Ref
+fromBSorThrow :: Serializable a => ByteString -> RedisM inst a
+fromBSorThrow bs = maybe (throw $ CouldNotDecodeValue $ Just bs) pure $ fromBS bs
 
 data SimpleValueIdentifier
   = SviTopLevel ByteString         -- ^ Stored in a top-level key.

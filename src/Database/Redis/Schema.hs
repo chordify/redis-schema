@@ -332,8 +332,8 @@ class Value inst val where
   txValGet :: Identifier val -> Tx inst (Maybe val)
 
   default txValGet :: SimpleValue inst val => Identifier val -> Tx inst (Maybe val)
-  txValGet (SviTopLevel keyBS) = fmap (fromBS =<<) . txWrap $ Hedis.get keyBS
-  txValGet (SviHash keyBS hkeyBS) = fmap (fromBS =<<) . txWrap $ Hedis.hget keyBS hkeyBS
+  txValGet (SviTopLevel keyBS) = txFromBSorExcept $ txWrap $ Hedis.get keyBS
+  txValGet (SviHash keyBS hkeyBS) = txFromBSorExcept $ txWrap $ Hedis.hget keyBS hkeyBS
 
   -- | Write a value to Redis in a transaction.
   txValSet :: Identifier val -> val -> Tx inst ()
@@ -368,9 +368,9 @@ class Value inst val where
 
   default valGet :: SimpleValue inst val => Identifier val -> RedisM inst (Maybe val)
   valGet (SviTopLevel keyBS) =
-    (traverse fromBSorThrow <=< expectRight "valGet/plain") =<< Hedis.get keyBS
+    (traverse rFromBSorThrow <=< expectRight "valGet/plain") =<< Hedis.get keyBS
   valGet (SviHash keyBS hkeyBS) =
-    (traverse fromBSorThrow <=< expectRight "valGet/hash") =<< Hedis.hget keyBS hkeyBS
+    (traverse rFromBSorThrow <=< expectRight "valGet/hash") =<< Hedis.hget keyBS hkeyBS
 
   -- | Write a value.
   valSet :: Identifier val -> val -> RedisM inst ()
@@ -401,8 +401,14 @@ class Value inst val where
     expectRight "valSetTTLIfExists/hash" =<< Hedis.expire keyBS ttlSec
 
 -- | Ensure the fromBS conversation does not fail silently due to a change of the internal Haskell ValueType of a Ref
-fromBSorThrow :: Serializable a => ByteString -> RedisM inst a
-fromBSorThrow bs = maybe (throw $ CouldNotDecodeValue $ Just bs) pure $ fromBS bs
+rFromBSorThrow :: Serializable a => ByteString -> RedisM inst a
+rFromBSorThrow bs = maybe (throw $ CouldNotDecodeValue $ Just bs) pure $ fromBS bs
+
+txFromBSorExcept :: Serializable a => Tx inst (Maybe ByteString) -> Tx inst (Maybe a)
+txFromBSorExcept = txCheckMap $ traverse $ maybeToEither . CouldNotDecodeValue . Just <*> fromBS
+  where
+    maybeToEither _ (Just b) = Right b
+    maybeToEither a Nothing = Left a
 
 data SimpleValueIdentifier
   = SviTopLevel ByteString         -- ^ Stored in a top-level key.
@@ -455,7 +461,7 @@ txTake ref = txGet ref <* txDelete_ ref
 getSet :: forall ref. SimpleRef ref => ref -> ValueType ref -> RedisM (RefInstance ref) (Maybe (ValueType ref))
 getSet ref val = case toIdentifier ref of
   SviTopLevel keyBS ->
-    traverse fromBSorThrow
+    traverse rFromBSorThrow
     =<< expectRight "getSet/plain"
     =<< Hedis.getset keyBS (toBS val)
 
@@ -874,14 +880,14 @@ lPopRight :: forall ref a. (Ref ref, ValueType ref ~ [a], Serializable a) => ref
 lPopRight (toIdentifier -> keyBS) =
   Redis (Hedis.rpop keyBS)
   >>= expectRight "rpop"
-  >>= traverse fromBSorThrow
+  >>= traverse rFromBSorThrow
 
 -- | Pop from the right, blocking.
 lPopRightBlocking :: forall ref a. (Ref ref, ValueType ref ~ [a], Serializable a) => TTL -> ref -> RedisM (RefInstance ref) (Maybe a)
 lPopRightBlocking (TTLSec timeoutSec) (toIdentifier -> keyBS) =
   Redis (Hedis.brpop [keyBS] timeoutSec)
     >>= expectRight "brpop"
-    >>= traverse (fromBSorThrow . snd)
+    >>= traverse (rFromBSorThrow . snd)
 
 -- | Delete from a Redis list
 lRem :: forall ref a. (Ref ref, ValueType ref ~ [a], Serializable a) => ref -> Integer -> a -> RedisM (RefInstance ref) ()

@@ -368,9 +368,9 @@ class Value inst val where
 
   default valGet :: SimpleValue inst val => Identifier val -> RedisM inst (Maybe val)
   valGet (SviTopLevel keyBS) =
-    (traverse rFromBSorThrow <=< expectRight "valGet/plain") =<< Hedis.get keyBS
+    traverse rFromBSorThrow =<< expectRight "valGet/plain" =<< Hedis.get keyBS
   valGet (SviHash keyBS hkeyBS) =
-    (traverse rFromBSorThrow <=< expectRight "valGet/hash") =<< Hedis.hget keyBS hkeyBS
+    traverse rFromBSorThrow =<< expectRight "valGet/hash" =<< Hedis.hget keyBS hkeyBS
 
   -- | Write a value.
   valSet :: Identifier val -> val -> RedisM inst ()
@@ -400,15 +400,12 @@ class Value inst val where
   valSetTTLIfExists (SviHash keyBS _hkeyBS) (TTLSec ttlSec) =
     expectRight "valSetTTLIfExists/hash" =<< Hedis.expire keyBS ttlSec
 
--- | Ensure the fromBS conversation does not fail silently due to a change of the internal Haskell ValueType of a Ref
+-- | Ensure the fromBS conversion does not fail silently due to a change of the internal Haskell ValueType of a Ref
 rFromBSorThrow :: Serializable a => ByteString -> RedisM inst a
 rFromBSorThrow bs = maybe (throw $ CouldNotDecodeValue $ Just bs) pure $ fromBS bs
 
 txFromBSorExcept :: Serializable a => Tx inst (Maybe ByteString) -> Tx inst (Maybe a)
-txFromBSorExcept = txCheckMap $ traverse $ maybeToEither . CouldNotDecodeValue . Just <*> fromBS
-  where
-    maybeToEither _ (Just b) = Right b
-    maybeToEither a Nothing = Left a
+txFromBSorExcept = txCheckMap $ traverse $ \bs -> maybe (Left $ CouldNotDecodeValue $ Just bs) Right $ fromBS bs
 
 data SimpleValueIdentifier
   = SviTopLevel ByteString         -- ^ Stored in a top-level key.

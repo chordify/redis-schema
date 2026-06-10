@@ -45,7 +45,7 @@ library
     , bytestring
     , containers
     , exceptions
-    , hedis
+    , hedis >=0.16.1 && <0.17
     , monadIO
     , mtl
     , numeric-limits

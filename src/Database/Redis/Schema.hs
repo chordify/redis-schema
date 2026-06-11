@@ -561,7 +561,7 @@ setIfNotExistsTTL ref val (TTLSec ttlSec) =
       , Hedis.setCondition    = Just Hedis.Nx
       , Hedis.setUnixMilliseconds = Nothing
       , Hedis.setUnixSeconds  = Nothing
-      , Hedis.setKeepTTL      = True
+      , Hedis.setKeepTTL      = False
       }
 
 deleteIfEqual :: forall ref. SimpleRef ref => ref -> ValueType ref -> RedisM (RefInstance ref) Bool

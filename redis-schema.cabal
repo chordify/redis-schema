@@ -40,7 +40,7 @@ library
       OverloadedStrings
   ghc-options: -Wall
   build-depends:
-      base >=4.7 && <5
+      base >=4.18 && <5
     , binary
     , bytestring
     , containers

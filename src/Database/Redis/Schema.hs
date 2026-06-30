@@ -70,7 +70,7 @@ module Database.Redis.Schema
 import GHC.Word         ( Word32  )
 import Data.Functor     ( void, (<&>) )
 import Data.Function    ( (&) )
-import Data.List.NonEmpty ( NonEmpty (..), nonEmpty )
+import Data.List.NonEmpty ( NonEmpty (..) )
 import Data.Time        ( UTCTime, LocalTime, Day )
 import Text.Read        ( readMaybe )
 import Data.ByteString  ( ByteString )
@@ -95,6 +95,7 @@ import qualified Numeric.Limits
 import qualified Database.Redis as Hedis
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy as BSL
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified System.IO.Error as IOE
@@ -177,13 +178,6 @@ expect msg expected actual
 ignore :: a -> RedisM inst ()
 ignore _ = pure ()
 
--- | @Since @hedis-0.16@ it requires non-empty list.
--- According to Redis semantics, server will throw an error anyway.
-withNonEmptyList :: [a] -> (NonEmpty a -> RedisM inst b) -> RedisM inst b
-withNonEmptyList xs action = case nonEmpty xs of
-  Nothing -> throwMsg "Redis.withNonEmptyList: empty list"
-  Just l -> action l
-
 -- | Open a connection pool to redis
 connect :: String -> Int -> IO (Pool inst)
 connect connectionString poolSize =
@@ -261,12 +255,6 @@ runTx = Redis . Hedis.multiExec . unTx
 -- | Throw in a transaction.
 txThrow :: RedisException -> Tx inst a
 txThrow e = Tx $ pure (pure (Left e))
-
--- | Same as 'withNonEmptyList' but for 'Tx'. It will throw an exception if provided list is empty.
-txNonEmptyList :: [a] -> (NonEmpty a -> Tx inst b) -> Tx inst b
-txNonEmptyList xs action = case nonEmpty xs of
-  Nothing -> txThrow $ UserException "txNonEmptyList: emptyList"
-  Just l -> action l
 
 -- | Embed a raw Hedis action in a 'Tx' transaction.
 txWrap :: Hedis.RedisTx (Hedis.Queued a) -> Tx inst a
@@ -843,8 +831,9 @@ instance Serializable a => Value inst [a] where
     txWrap (Hedis.lrange keyBS 0 (-1))
     & txFromBSMany
     & fmap Just
-  txValSet keyBS vs = txNonEmptyList (map toBS vs) $ \l -> void $ txWrap
-    (Hedis.del (keyBS :| []) *> Hedis.rpush keyBS l)
+  txValSet _ [] = txThrow $ UserException "txValSet: empty list"
+  txValSet keyBS (v : vs) = void $ txWrap
+    (Hedis.del (keyBS :| []) *> Hedis.rpush keyBS (NE.map toBS (v :| vs)))
   txValDelete keyBS = void $ txWrap (Hedis.del $ keyBS :| [])
   txValSetTTLIfExists keyBS (TTLSec ttlSec) = txWrap (Hedis.expire keyBS ttlSec)
 
@@ -855,9 +844,10 @@ instance Serializable a => Value inst [a] where
         Left badBS -> throw $ CouldNotDecodeValue (Just badBS)
         Right vs -> pure (Just vs))
 
-  valSet keyBS vs = withNonEmptyList (map toBS vs) $ \l ->
+  valSet _ [] = throwMsg "valSet: empty list"
+  valSet keyBS (v : vs) =
     Redis (Hedis.multiExec
-      (Hedis.del (keyBS :| []) *> Hedis.rpush keyBS l))
+      (Hedis.del (keyBS :| []) *> Hedis.rpush keyBS (NE.map toBS (v :| vs))))
       >>= expectTxSuccess
       >>= ignore @Integer
   valDelete keyBS =
@@ -869,16 +859,15 @@ instance Serializable a => Value inst [a] where
       >>= expectRight "valSetTTLIfExists/[a]"
 
 -- | Append to a Redis list.
-lAppend :: forall ref a. (Ref ref, ValueType ref ~ [a], Serializable a) => ref -> [a] -> RedisM (RefInstance ref) ()
-lAppend (toIdentifier -> keyBS) vals = withNonEmptyList (map toBS vals) $ \l ->
-  Redis (Hedis.rpush keyBS l)
+lAppend :: forall ref a. (Ref ref, ValueType ref ~ [a], Serializable a) => ref -> NonEmpty a -> RedisM (RefInstance ref) ()
+lAppend (toIdentifier -> keyBS) vals =
+  Redis (Hedis.rpush keyBS (NE.map toBS vals))
     >>= expectRight "rpush"
     >>= ignore @Integer
 
 -- | Append to a Redis list in a transaction.
-txLAppend :: forall ref a. (Ref ref, ValueType ref ~ [a], Serializable a) => ref -> [a] -> Tx (RefInstance ref) ()
-txLAppend (toIdentifier -> keyBS) vals = txNonEmptyList (map toBS vals) $ \l ->
-  void . txWrap $ Hedis.rpush keyBS l
+txLAppend :: forall ref a. (Ref ref, ValueType ref ~ [a], Serializable a) => ref -> NonEmpty a -> Tx (RefInstance ref) ()
+txLAppend (toIdentifier -> keyBS) vals = void . txWrap $ Hedis.rpush keyBS $ NE.map toBS vals
 
 -- | Length of a Redis list
 lLength :: forall ref a. (Ref ref, ValueType ref ~ [a], Serializable a) => ref -> RedisM (RefInstance ref) Integer
@@ -887,9 +876,9 @@ lLength (toIdentifier -> keyBS) =
     >>= expectRight "llen"
 
 -- | Prepend to a Redis list.
-lPushLeft :: forall ref a. (Ref ref, ValueType ref ~ [a], Serializable a) => ref -> [a] -> RedisM (RefInstance ref) ()
-lPushLeft (toIdentifier -> keyBS) vals = withNonEmptyList (map toBS vals) $ \l ->
-  Redis (Hedis.lpush keyBS l)
+lPushLeft :: forall ref a. (Ref ref, ValueType ref ~ [a], Serializable a) => ref -> NonEmpty a -> RedisM (RefInstance ref) ()
+lPushLeft (toIdentifier -> keyBS) vals =
+  Redis (Hedis.lpush keyBS (NE.map toBS vals))
     >>= expectRight "lpush"
     >>= ignore @Integer
 
@@ -924,8 +913,9 @@ instance (Serializable a, Ord a) => Value inst (Set a) where
     & txFromBSMany
     & fmap (Just . Set.fromList)
 
-  txValSet keyBS vs = txNonEmptyList (map toBS $ Set.toList vs) $ \l ->
-    void $ txWrap (Hedis.del (keyBS :| []) *> Hedis.sadd keyBS l)
+  txValSet keyBS vs = case map toBS $ Set.toList vs of
+    [] -> txThrow $ UserException "txValSet: empty set"
+    (x : xs) -> void $ txWrap (Hedis.del (keyBS :| []) *> Hedis.sadd keyBS (x :| xs))
 
   txValDelete keyBS = void $ txWrap (Hedis.del (keyBS :| []))
   txValSetTTLIfExists keyBS (TTLSec ttlSec) = txWrap (Hedis.expire keyBS ttlSec)
@@ -937,10 +927,12 @@ instance (Serializable a, Ord a) => Value inst (Set a) where
         Left badBS -> throw $ CouldNotDecodeValue (Just badBS)
         Right vs -> pure (Just $ Set.fromList vs))
 
-  valSet keyBS vs = withNonEmptyList (map toBS $ Set.toList vs) $ \l ->
-    Redis (Hedis.multiExec (Hedis.del (keyBS :| []) *> Hedis.sadd keyBS l))
-      >>= expectTxSuccess
-      >>= ignore @Integer
+  valSet keyBS vs = case (map toBS $ Set.toList vs) of
+    [] -> throwMsg "valSet: empty set"
+    (x : xs) -> 
+      Redis (Hedis.multiExec (Hedis.del (keyBS :| []) *> Hedis.sadd keyBS (x :| xs)))
+        >>= expectTxSuccess
+        >>= ignore @Integer
 
   valDelete keyBS = Redis (Hedis.del (keyBS :| []))
     >>= expectRight "valDelete/Set a"
@@ -951,28 +943,26 @@ instance (Serializable a, Ord a) => Value inst (Set a) where
       >>= expectRight "valSetTTLIfExists/Set a"
 
 -- | Insert into a Redis set.
-sInsert :: forall ref a. (Ref ref, ValueType ref ~ Set a, Serializable a) => ref -> [a] -> RedisM (RefInstance ref) ()
-sInsert ref vals = withNonEmptyList (map toBS vals) $ \l ->
-  Redis (Hedis.sadd (toIdentifier ref) l)
+sInsert :: forall ref a. (Ref ref, ValueType ref ~ Set a, Serializable a) => ref -> NonEmpty a -> RedisM (RefInstance ref) ()
+sInsert ref vals =
+  Redis (Hedis.sadd (toIdentifier ref) (NE.map toBS vals))
     >>= expectRight "setInsert"
     >>= ignore @Integer
 
 -- | Insert into a Redis set in a transaction.
-txSInsert :: forall ref a. (Ref ref, ValueType ref ~ Set a, Serializable a) => ref -> [a] -> Tx (RefInstance ref) ()
-txSInsert ref vals = txNonEmptyList (map toBS vals) $ \l ->
-  void . txWrap $ Hedis.sadd (toIdentifier ref) l
+txSInsert :: forall ref a. (Ref ref, ValueType ref ~ Set a, Serializable a) => ref -> NonEmpty a -> Tx (RefInstance ref) ()
+txSInsert ref vals = void . txWrap $ Hedis.sadd (toIdentifier ref) (NE.map toBS vals)
 
 -- | Delete from a Redis set.
-sDelete :: forall ref a. (Ref ref, ValueType ref ~ Set a, Serializable a) => ref -> [a] -> RedisM (RefInstance ref) ()
-sDelete ref vals = withNonEmptyList (map toBS vals) $ \l ->
-  Redis (Hedis.srem (toIdentifier ref) l)
+sDelete :: forall ref a. (Ref ref, ValueType ref ~ Set a, Serializable a) => ref -> NonEmpty a -> RedisM (RefInstance ref) ()
+sDelete ref vals =
+  Redis (Hedis.srem (toIdentifier ref) (NE.map toBS vals))
     >>= expectRight "hashSetDelete"
     >>= ignore @Integer
 
 -- | Delete from a Redis set in a transaction.
-txSDelete :: forall ref a. (Ref ref, ValueType ref ~ Set a, Serializable a) => ref -> [a] -> Tx (RefInstance ref) ()
-txSDelete ref vals = txNonEmptyList (map toBS vals) $ \l ->
-  void . txWrap $ Hedis.srem (toIdentifier ref) l
+txSDelete :: forall ref a. (Ref ref, ValueType ref ~ Set a, Serializable a) => ref -> NonEmpty a -> Tx (RefInstance ref) ()
+txSDelete ref vals = void . txWrap $ Hedis.srem (toIdentifier ref) (NE.map toBS vals)
 
 -- | Check membership in a Redis set.
 sContains :: forall ref a. (Ref ref, ValueType ref ~ Set a, Serializable a) => ref -> a -> RedisM (RefInstance ref) Bool
@@ -1119,9 +1109,9 @@ zScanOpts (toIdentifier -> keyBS) mMatch mCount =
   >>= expectRight "zscanOpts call"
   >>= expectRight "zscanOpts decode" . fromBSMany . map fst . snd
 
-zUnionStoreWeights :: forall ref a. (Ref ref, ValueType ref ~ [(Priority, a)], Serializable a) => ref -> [(ref, Double)] -> RedisM (RefInstance ref) ()
+zUnionStoreWeights :: forall ref a. (Ref ref, ValueType ref ~ [(Priority, a)], Serializable a) => ref -> NonEmpty (ref, Double) -> RedisM (RefInstance ref) ()
 zUnionStoreWeights (toIdentifier -> keyBS) refWithWeights =
-  Hedis.zunionstoreWeights keyBS [(toIdentifier k, d) | (k, d) <- refWithWeights] Hedis.Sum
+  Hedis.zunionstoreWeights keyBS [(toIdentifier k, d) | (k, d) <- NE.toList refWithWeights] Hedis.Sum
   >>= expectRight "zUnionStoreWeights call"
   >>= ignore @Integer
 
@@ -1145,10 +1135,12 @@ instance (Ord k, Serializable k, Serializable v) => Value inst (Map k v) where
           . parseMap
         )
 
-  txValSet keyBS m = txNonEmptyList [(toBS ref, toBS val) | (ref, val) <- Map.toList m] $ \l ->
+  txValSet keyBS m = case [(toBS ref, toBS val) | (ref, val) <- Map.toList m] of
+    [] -> txThrow $ UserException "txValSet: empty map"
+    (v : vs) -> 
       void $ txWrap (
         Hedis.del (keyBS :| [])
-        *> Hedis.hmset keyBS l
+        *> Hedis.hmset keyBS (v :| vs)
       )
 
   txValDelete keyBS = void . txWrap $ Hedis.del (keyBS :| [])
@@ -1162,10 +1154,12 @@ instance (Ord k, Serializable k, Serializable v) => Value inst (Map k v) where
         Just m -> pure (Just m)
         Nothing -> throw $ CouldNotDecodeValue Nothing
 
-  valSet keyBS m = withNonEmptyList [(toBS ref, toBS val) | (ref, val) <- Map.toList m] $ \l ->
+  valSet keyBS m = case [(toBS ref, toBS val) | (ref, val) <- Map.toList m] of
+    [] -> throwMsg "Redis.valSet: map must not be empty"
+    (x : xs) ->
       Redis (Hedis.multiExec (
         Hedis.del (keyBS :| [])
-        *> Hedis.hmset keyBS l
+        *> Hedis.hmset keyBS (x :| xs)
       ))
         >>= expectTxSuccess
         >>= expect "valSet/Map k v" Hedis.Ok

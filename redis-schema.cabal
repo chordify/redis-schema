@@ -7,7 +7,7 @@ cabal-version: 1.12
 -- hash: 1876630159ac153904237e5ab7ec2b440a07213ac8ca4b6420a02fff46e1524d
 
 name:           redis-schema
-version:        0.1.0
+version:        0.2.0
 synopsis:       Typed, schema-based, composable Redis library
 description:    Typed, schema-based, composable Redis library
 category:       Database

@@ -36,6 +36,7 @@ module Database.Redis.Schema.RemoteJob (
 
 import Data.Binary ( decode, encode, Binary(..) )
 import Data.Bifunctor as BF ( second )
+import Data.List.NonEmpty ( NonEmpty (..) )
 import Data.Kind ( Type )
 import Data.Maybe ( isJust )
 import Data.Proxy ( Proxy(..) )
@@ -249,8 +250,8 @@ remoteJobWorker' cont wid pool logger = doHandle (Proxy @m) (Proxy @(RPC q)) $ \
         -- Update the RunningJobs queue at the start and end of this block,
         -- and keep the workerFree var up to date
         bracket_
-          (run pool (sInsert (RunningJobs @q) [(wid,job)]) >> liftIO (takeMVar workerFree))
-          (run pool (sDelete (RunningJobs @q) [(wid,job)]) >> liftIO (putMVar workerFree ())) $ do
+          (run pool (sInsert (RunningJobs @q) ((wid,job) :| [])) >> liftIO (takeMVar workerFree))
+          (run pool (sDelete (RunningJobs @q) ((wid,job) :| [])) >> liftIO (putMVar workerFree ())) $ do
             -- Call the actual handler
             resp <- fmap Right (handler (jobHandlerIdx job) (jobInput job))
                     `catchAll`
@@ -262,7 +263,7 @@ remoteJobWorker' cont wid pool logger = doHandle (Proxy @m) (Proxy @(RPC q)) $ \
                   Right b -> Right b
             run pool $ do
               let box = ResultBox @q (jobId job)
-              lPushLeft box [bso]
+              lPushLeft box (bso :| [])
               -- set ttl to ensure the data is not left behind in case of crashes,
               -- the caller should be awaiting this already, so it's either read
               -- directly or it is never read.

@@ -40,12 +40,12 @@ library
       OverloadedStrings
   ghc-options: -Wall
   build-depends:
-      base >=4.7 && <5
+      base >=4.18 && <5
     , binary
     , bytestring
     , containers
     , exceptions
-    , hedis
+    , hedis >=0.16.1 && <0.17
     , monadIO
     , mtl
     , numeric-limits

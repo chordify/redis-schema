@@ -10,14 +10,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        ghc: ["8.10.7", "9.0.2", "9.2.8", "9.4.8", "9.6.4"]
-        cabal: ["3.10.2.1"]
+        ghc: ["9.6.4", "9.8.4", "9.10.3", "9.12.4"]
+        cabal: ["3.16.0.0"]
         os: [ubuntu-latest, macOS-latest]
     name: build and test (cabal)
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Run Haskell
-        uses: haskell/actions/setup@v1
+        uses: haskell-actions/setup@v2
         with:
           ghc-version: ${{ matrix.ghc }}
           cabal-version: ${{ matrix.cabal }}
@@ -31,10 +31,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest]
     steps:
-      - uses: actions/checkout@v2
-      - uses: haskell/actions/setup@v1
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
         with:
-          ghc-version: "9.4.8"  # current version used at Chordify
+          ghc-version: "9.8.4"  # current version used at Chordify
           enable-stack: true
           stack-version: "latest"
       - run: |

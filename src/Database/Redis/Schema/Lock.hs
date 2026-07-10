@@ -29,12 +29,13 @@ module Database.Redis.Schema.Lock
   where
 
 import GHC.Generics
-import Data.Functor     ( void )
-import Data.Kind        ( Type )
-import Data.Maybe       ( fromMaybe )
-import Data.Time        ( NominalDiffTime, addUTCTime, getCurrentTime )
-import Data.Set         ( Set )
-import Data.ByteString  ( ByteString )
+import Data.Functor       ( void )
+import Data.List.NonEmpty ( NonEmpty (..) )
+import Data.Kind          ( Type )
+import Data.Maybe         ( fromMaybe )
+import Data.Time          ( NominalDiffTime, addUTCTime, getCurrentTime )
+import Data.Set           ( Set )
+import Data.ByteString    ( ByteString )
 import qualified Data.Set as Set
 import qualified Data.ByteString.Char8 as BS
 
@@ -339,7 +340,7 @@ shareableLockAcquire redis slp lockSharing ref = do
               -- we want to share
               -- so we can acquire
               Just Shared | lockSharing == Shared -> do
-                Redis.sInsert (lockField LockFieldOwners) [ourId]
+                Redis.sInsert (lockField LockFieldOwners) (ourId :| [])
                 return True
 
               -- can't acquire lock otherwise
@@ -384,7 +385,7 @@ shareableLockRelease redis slp ref lockSharing ourId =
             -- delete the whole lock
             then Redis.delete_ ref
             -- just remove ourselves from the list of owners
-            else Redis.sDelete (lockField LockFieldOwners) [ourId]
+            else Redis.sDelete (lockField LockFieldOwners) (ourId :| [])
   where
     lockField :: LockFieldName ty -> LockField (Redis.RefInstance ref) ty
     lockField = LockField (Redis.toIdentifier ref)

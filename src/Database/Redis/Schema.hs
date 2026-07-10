@@ -70,6 +70,7 @@ module Database.Redis.Schema
 import GHC.Word         ( Word32  )
 import Data.Functor     ( void, (<&>) )
 import Data.Function    ( (&) )
+import Data.List.NonEmpty ( NonEmpty (..) )
 import Data.Time        ( UTCTime, LocalTime, Day )
 import Text.Read        ( readMaybe )
 import Data.ByteString  ( ByteString )
@@ -94,6 +95,7 @@ import qualified Numeric.Limits
 import qualified Database.Redis as Hedis
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy as BSL
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified System.IO.Error as IOE
@@ -344,14 +346,14 @@ class Value inst val where
       $ txWrap (Hedis.set keyBS $ toBS val)
   txValSet (SviHash keyBS hkeyBS) val =
     void
-      $ txWrap (Hedis.hset keyBS hkeyBS $ toBS val)
+      $ txWrap (Hedis.hset keyBS $ (hkeyBS, toBS val) :| [])
 
   -- | Delete a value from Redis in a transaction.
   txValDelete :: Identifier val -> Tx inst ()
 
   default txValDelete :: SimpleValue inst val => Identifier val -> Tx inst ()
-  txValDelete (SviTopLevel keyBS) = void . txWrap $ Hedis.del [keyBS]
-  txValDelete (SviHash keyBS hkeyBS) = void . txWrap $ Hedis.hdel keyBS [hkeyBS]
+  txValDelete (SviTopLevel keyBS) = void . txWrap $ Hedis.del (keyBS :| [])
+  txValDelete (SviHash keyBS hkeyBS) = void . txWrap $ Hedis.hdel keyBS (hkeyBS :| [])
 
   -- | Set time-to-live for a value in a transaction. Return 'True' if the value exists.
   txValSetTTLIfExists :: Identifier val -> TTL -> Tx inst Bool
@@ -379,7 +381,7 @@ class Value inst val where
   valSet (SviTopLevel keyBS) val =
     expect "valSet/plain" (Right Hedis.Ok) =<< Hedis.set keyBS (toBS val)
   valSet (SviHash keyBS hkeyBS) val =
-    ignore {- @Integer -} =<< expectRight "valSet/hash" =<< Hedis.hset keyBS hkeyBS (toBS val)
+    ignore {- @Integer -} =<< expectRight "valSet/hash" =<< Hedis.hset keyBS ((hkeyBS, toBS val) :| [])
       --   ^- this is Bool in some versions of Hedis and Integer in others
 
   -- | Delete a value.
@@ -387,9 +389,9 @@ class Value inst val where
 
   default valDelete :: SimpleValue inst val => Identifier val -> RedisM inst ()
   valDelete (SviTopLevel keyBS) =
-    ignore @Integer =<< expectRight "valDelete/plain" =<< Hedis.del [keyBS]
+    ignore @Integer =<< expectRight "valDelete/plain" =<< Hedis.del (keyBS :| [])
   valDelete (SviHash keyBS hkeyBS) =
-    ignore @Integer =<< expectRight "valDelete/hash" =<< Hedis.hdel keyBS [hkeyBS]
+    ignore @Integer =<< expectRight "valDelete/hash" =<< Hedis.hdel keyBS (hkeyBS :| [])
 
   -- | Set time-to-live for a value. Return 'True' if the value exists.
   valSetTTLIfExists :: Identifier val -> TTL -> RedisM inst Bool
@@ -501,12 +503,14 @@ setWithTTL ref ttl@(TTLSec ttlSec) val = case toIdentifier ref of
 incrementBy :: (SimpleRef ref, Num (ValueType ref)) => ref -> Integer -> RedisM (RefInstance ref) (ValueType ref)
 incrementBy ref val = fmap fromInteger . expectRight "incrementBy" =<< case toIdentifier ref of
   SviTopLevel keyBS -> Hedis.incrby keyBS val
-  SviHash keyBS hkeyBS -> Hedis.hincrby keyBS hkeyBS val
+  SviHash keyBS hkeyBS -> fmap (fromIntegral @Int64 @Integer)
+    <$> Hedis.hincrby keyBS hkeyBS (fromIntegral @Integer @Int64 val)
 
 txIncrementBy :: (SimpleRef ref, Num (ValueType ref)) => ref -> Integer -> Tx (RefInstance ref) (ValueType ref)
 txIncrementBy ref val = fmap fromInteger . txWrap $ case toIdentifier ref of
   SviTopLevel keyBS -> Hedis.incrby keyBS val
-  SviHash keyBS hkeyBS -> Hedis.hincrby keyBS hkeyBS val
+  SviHash keyBS hkeyBS -> fmap (fromIntegral @Int64 @Integer)
+    <$> Hedis.hincrby keyBS hkeyBS (fromIntegral @Integer @Int64 val)
 
 -- | Increment the value under the given ref.
 incrementByFloat :: (SimpleRef ref, Floating (ValueType ref)) => ref -> Double -> RedisM (RefInstance ref) (ValueType ref)
@@ -543,6 +547,9 @@ setIfNotExistsTTL ref val (TTLSec ttlSec) =
       { Hedis.setSeconds      = Just ttlSec
       , Hedis.setMilliseconds = Nothing
       , Hedis.setCondition    = Just Hedis.Nx
+      , Hedis.setUnixMilliseconds = Nothing
+      , Hedis.setUnixSeconds  = Nothing
+      , Hedis.setKeepTTL      = False
       }
 
 deleteIfEqual :: forall ref. SimpleRef ref => ref -> ValueType ref -> RedisM (RefInstance ref) Bool
@@ -824,8 +831,10 @@ instance Serializable a => Value inst [a] where
     txWrap (Hedis.lrange keyBS 0 (-1))
     & txFromBSMany
     & fmap Just
-  txValSet keyBS vs = void $ txWrap (Hedis.del [keyBS] *> Hedis.rpush keyBS (map toBS vs))
-  txValDelete keyBS = void $ txWrap (Hedis.del [keyBS])
+  txValSet _ [] = txThrow $ UserException "txValSet: empty list"
+  txValSet keyBS (v : vs) = void $ txWrap
+    (Hedis.del (keyBS :| []) *> Hedis.rpush keyBS (NE.map toBS (v :| vs)))
+  txValDelete keyBS = void $ txWrap (Hedis.del $ keyBS :| [])
   txValSetTTLIfExists keyBS (TTLSec ttlSec) = txWrap (Hedis.expire keyBS ttlSec)
 
   valGet keyBS =
@@ -835,12 +844,14 @@ instance Serializable a => Value inst [a] where
         Left badBS -> throw $ CouldNotDecodeValue (Just badBS)
         Right vs -> pure (Just vs))
 
-  valSet keyBS vs =
-    Redis (Hedis.multiExec (Hedis.del [keyBS] *> Hedis.rpush keyBS (map toBS vs)))
+  valSet _ [] = throwMsg "valSet: empty list"
+  valSet keyBS (v : vs) =
+    Redis (Hedis.multiExec
+      (Hedis.del (keyBS :| []) *> Hedis.rpush keyBS (NE.map toBS (v :| vs))))
       >>= expectTxSuccess
       >>= ignore @Integer
   valDelete keyBS =
-    Redis (Hedis.del [keyBS])
+    Redis (Hedis.del (keyBS :| []))
       >>= expectRight "valDelete/[a]"
       >>= ignore @Integer
   valSetTTLIfExists keyBS (TTLSec ttlSec) =
@@ -848,16 +859,15 @@ instance Serializable a => Value inst [a] where
       >>= expectRight "valSetTTLIfExists/[a]"
 
 -- | Append to a Redis list.
-lAppend :: forall ref a. (Ref ref, ValueType ref ~ [a], Serializable a) => ref -> [a] -> RedisM (RefInstance ref) ()
+lAppend :: forall ref a. (Ref ref, ValueType ref ~ [a], Serializable a) => ref -> NonEmpty a -> RedisM (RefInstance ref) ()
 lAppend (toIdentifier -> keyBS) vals =
-  Redis (Hedis.rpush keyBS (map toBS vals))
+  Redis (Hedis.rpush keyBS (NE.map toBS vals))
     >>= expectRight "rpush"
     >>= ignore @Integer
 
 -- | Append to a Redis list in a transaction.
-txLAppend :: forall ref a. (Ref ref, ValueType ref ~ [a], Serializable a) => ref -> [a] -> Tx (RefInstance ref) ()
-txLAppend (toIdentifier -> keyBS) vals =
-  void . txWrap $ Hedis.rpush keyBS (map toBS vals)
+txLAppend :: forall ref a. (Ref ref, ValueType ref ~ [a], Serializable a) => ref -> NonEmpty a -> Tx (RefInstance ref) ()
+txLAppend (toIdentifier -> keyBS) vals = void . txWrap $ Hedis.rpush keyBS $ NE.map toBS vals
 
 -- | Length of a Redis list
 lLength :: forall ref a. (Ref ref, ValueType ref ~ [a], Serializable a) => ref -> RedisM (RefInstance ref) Integer
@@ -866,9 +876,9 @@ lLength (toIdentifier -> keyBS) =
     >>= expectRight "llen"
 
 -- | Prepend to a Redis list.
-lPushLeft :: forall ref a. (Ref ref, ValueType ref ~ [a], Serializable a) => ref -> [a] -> RedisM (RefInstance ref) ()
+lPushLeft :: forall ref a. (Ref ref, ValueType ref ~ [a], Serializable a) => ref -> NonEmpty a -> RedisM (RefInstance ref) ()
 lPushLeft (toIdentifier -> keyBS) vals =
-  Redis (Hedis.lpush keyBS (map toBS vals))
+  Redis (Hedis.lpush keyBS (NE.map toBS vals))
     >>= expectRight "lpush"
     >>= ignore @Integer
 
@@ -882,7 +892,7 @@ lPopRight (toIdentifier -> keyBS) =
 -- | Pop from the right, blocking.
 lPopRightBlocking :: forall ref a. (Ref ref, ValueType ref ~ [a], Serializable a) => TTL -> ref -> RedisM (RefInstance ref) (Maybe a)
 lPopRightBlocking (TTLSec timeoutSec) (toIdentifier -> keyBS) =
-  Redis (Hedis.brpop [keyBS] timeoutSec)
+  Redis (Hedis.brpop (keyBS :| []) timeoutSec)
     >>= expectRight "brpop"
     >>= traverse (rFromBSorThrow . snd)
 
@@ -903,13 +913,11 @@ instance (Serializable a, Ord a) => Value inst (Set a) where
     & txFromBSMany
     & fmap (Just . Set.fromList)
 
-  txValSet keyBS vs =
-    void $ txWrap (
-      Hedis.del [keyBS]
-      *> Hedis.sadd keyBS (map toBS $ Set.toList vs)
-    )
+  txValSet keyBS vs = case map toBS $ Set.toList vs of
+    [] -> txThrow $ UserException "txValSet: empty set"
+    (x : xs) -> void $ txWrap (Hedis.del (keyBS :| []) *> Hedis.sadd keyBS (x :| xs))
 
-  txValDelete keyBS = void $ txWrap (Hedis.del [keyBS])
+  txValDelete keyBS = void $ txWrap (Hedis.del (keyBS :| []))
   txValSetTTLIfExists keyBS (TTLSec ttlSec) = txWrap (Hedis.expire keyBS ttlSec)
 
   valGet keyBS =
@@ -919,15 +927,14 @@ instance (Serializable a, Ord a) => Value inst (Set a) where
         Left badBS -> throw $ CouldNotDecodeValue (Just badBS)
         Right vs -> pure (Just $ Set.fromList vs))
 
-  valSet keyBS vs =
-    Redis (Hedis.multiExec (
-      Hedis.del [keyBS]
-      *> Hedis.sadd keyBS (map toBS $ Set.toList vs)
-    ))
-      >>= expectTxSuccess
-      >>= ignore @Integer
+  valSet keyBS vs = case (map toBS $ Set.toList vs) of
+    [] -> throwMsg "valSet: empty set"
+    (x : xs) -> 
+      Redis (Hedis.multiExec (Hedis.del (keyBS :| []) *> Hedis.sadd keyBS (x :| xs)))
+        >>= expectTxSuccess
+        >>= ignore @Integer
 
-  valDelete keyBS = Redis (Hedis.del [keyBS])
+  valDelete keyBS = Redis (Hedis.del (keyBS :| []))
     >>= expectRight "valDelete/Set a"
     >>= ignore @Integer
 
@@ -936,30 +943,26 @@ instance (Serializable a, Ord a) => Value inst (Set a) where
       >>= expectRight "valSetTTLIfExists/Set a"
 
 -- | Insert into a Redis set.
-sInsert :: forall ref a. (Ref ref, ValueType ref ~ Set a, Serializable a) => ref -> [a] -> RedisM (RefInstance ref) ()
+sInsert :: forall ref a. (Ref ref, ValueType ref ~ Set a, Serializable a) => ref -> NonEmpty a -> RedisM (RefInstance ref) ()
 sInsert ref vals =
-  Redis (Hedis.sadd (toIdentifier ref) (map toBS vals))
+  Redis (Hedis.sadd (toIdentifier ref) (NE.map toBS vals))
     >>= expectRight "setInsert"
     >>= ignore @Integer
 
 -- | Insert into a Redis set in a transaction.
-txSInsert :: forall ref a. (Ref ref, ValueType ref ~ Set a, Serializable a) => ref -> [a] -> Tx (RefInstance ref) ()
-txSInsert ref vals =
-  void . txWrap
-    $ Hedis.sadd (toIdentifier ref) (map toBS vals)
+txSInsert :: forall ref a. (Ref ref, ValueType ref ~ Set a, Serializable a) => ref -> NonEmpty a -> Tx (RefInstance ref) ()
+txSInsert ref vals = void . txWrap $ Hedis.sadd (toIdentifier ref) (NE.map toBS vals)
 
 -- | Delete from a Redis set.
-sDelete :: forall ref a. (Ref ref, ValueType ref ~ Set a, Serializable a) => ref -> [a] -> RedisM (RefInstance ref) ()
+sDelete :: forall ref a. (Ref ref, ValueType ref ~ Set a, Serializable a) => ref -> NonEmpty a -> RedisM (RefInstance ref) ()
 sDelete ref vals =
-  Redis (Hedis.srem (toIdentifier ref) (map toBS vals))
+  Redis (Hedis.srem (toIdentifier ref) (NE.map toBS vals))
     >>= expectRight "hashSetDelete"
     >>= ignore @Integer
 
 -- | Delete from a Redis set in a transaction.
-txSDelete :: forall ref a. (Ref ref, ValueType ref ~ Set a, Serializable a) => ref -> [a] -> Tx (RefInstance ref) ()
-txSDelete ref vals =
-  void . txWrap
-    $ Hedis.srem (toIdentifier ref) (map toBS vals)
+txSDelete :: forall ref a. (Ref ref, ValueType ref ~ Set a, Serializable a) => ref -> NonEmpty a -> Tx (RefInstance ref) ()
+txSDelete ref vals = void . txWrap $ Hedis.srem (toIdentifier ref) (NE.map toBS vals)
 
 -- | Check membership in a Redis set.
 sContains :: forall ref a. (Ref ref, ValueType ref ~ Set a, Serializable a) => ref -> a -> RedisM (RefInstance ref) Bool
@@ -1002,7 +1005,7 @@ zInsert (toIdentifier -> keyBS) vals =
 -- | Delete from a Redis sorted set
 zDelete :: forall ref a. (Ref ref, ValueType ref ~ [(Priority, a)], Serializable a) => ref -> a -> RedisM (RefInstance ref) ()
 zDelete (toIdentifier -> keyBS) val =
-  Redis (Hedis.zrem keyBS [toBS val])
+  Redis (Hedis.zrem keyBS (toBS val :| []))
     >>= expectRight "zrem"
     >>= ignore @Integer
 
@@ -1106,9 +1109,9 @@ zScanOpts (toIdentifier -> keyBS) mMatch mCount =
   >>= expectRight "zscanOpts call"
   >>= expectRight "zscanOpts decode" . fromBSMany . map fst . snd
 
-zUnionStoreWeights :: forall ref a. (Ref ref, ValueType ref ~ [(Priority, a)], Serializable a) => ref -> [(ref, Double)] -> RedisM (RefInstance ref) ()
+zUnionStoreWeights :: forall ref a. (Ref ref, ValueType ref ~ [(Priority, a)], Serializable a) => ref -> NonEmpty (ref, Double) -> RedisM (RefInstance ref) ()
 zUnionStoreWeights (toIdentifier -> keyBS) refWithWeights =
-  Hedis.zunionstoreWeights keyBS [(toIdentifier k, d) | (k, d) <- refWithWeights] Hedis.Sum
+  Hedis.zunionstoreWeights keyBS [(toIdentifier k, d) | (k, d) <- NE.toList refWithWeights] Hedis.Sum
   >>= expectRight "zUnionStoreWeights call"
   >>= ignore @Integer
 
@@ -1132,14 +1135,15 @@ instance (Ord k, Serializable k, Serializable v) => Value inst (Map k v) where
           . parseMap
         )
 
-  txValSet keyBS m =
-    void $ txWrap (
-      Hedis.del [keyBS]
-      *> Hedis.hmset keyBS
-        [(toBS ref, toBS val) | (ref, val) <- Map.toList m]
-    )
+  txValSet keyBS m = case [(toBS ref, toBS val) | (ref, val) <- Map.toList m] of
+    [] -> txThrow $ UserException "txValSet: empty map"
+    (v : vs) -> 
+      void $ txWrap (
+        Hedis.del (keyBS :| [])
+        *> Hedis.hmset keyBS (v :| vs)
+      )
 
-  txValDelete keyBS = void . txWrap $ Hedis.del [keyBS]
+  txValDelete keyBS = void . txWrap $ Hedis.del (keyBS :| [])
   txValSetTTLIfExists keyBS (TTLSec ttlSec) =
     txWrap $ Hedis.expire keyBS ttlSec
 
@@ -1150,17 +1154,18 @@ instance (Ord k, Serializable k, Serializable v) => Value inst (Map k v) where
         Just m -> pure (Just m)
         Nothing -> throw $ CouldNotDecodeValue Nothing
 
-  valSet keyBS m =
-    Redis (Hedis.multiExec (
-      Hedis.del [keyBS]
-      *> Hedis.hmset keyBS
-        [(toBS ref, toBS val) | (ref, val) <- Map.toList m]
-    ))
-      >>= expectTxSuccess
-      >>= expect "valSet/Map k v" Hedis.Ok
+  valSet keyBS m = case [(toBS ref, toBS val) | (ref, val) <- Map.toList m] of
+    [] -> throwMsg "Redis.valSet: map must not be empty"
+    (x : xs) ->
+      Redis (Hedis.multiExec (
+        Hedis.del (keyBS :| [])
+        *> Hedis.hmset keyBS (x :| xs)
+      ))
+        >>= expectTxSuccess
+        >>= expect "valSet/Map k v" Hedis.Ok
 
   valDelete keyBS =
-    Redis (Hedis.del [keyBS])
+    Redis (Hedis.del (keyBS :| []))
       >>= expectRight "valDelete/Map k v"
       >>= ignore @Integer
 
@@ -1193,6 +1198,7 @@ instance
   , ValueType ref ~ Map k v
   , Serializable k
   , SimpleValue (RefInstance ref) v
+  , Value (RefInstance ref) v
   ) => Ref (MapItem ref k v) where
 
   type ValueType (MapItem ref k v) = v
@@ -1216,6 +1222,7 @@ instance
   , ValueType ref ~ Record fieldF
   , SimpleValue (RefInstance ref) val
   , RecordField fieldF
+  , Value (RefInstance ref) val
   ) => Ref (RecordItem ref fieldF val) where
 
   type ValueType (RecordItem ref fieldF val) = val
@@ -1253,11 +1260,11 @@ instance Value inst (Record fieldF) where
   type Identifier (Record fieldF) = ByteString
   txValGet _ = error "Record is not meant to be read"
   txValSet _ _ = error "Record is not meant to be written"
-  txValDelete keyBS = void . txWrap $ Hedis.del [keyBS]
+  txValDelete keyBS = void . txWrap $ Hedis.del (keyBS :| [])
   txValSetTTLIfExists keyBS (TTLSec ttlSec) = txWrap $ Hedis.expire keyBS ttlSec
   valGet _ = error "Record is not meant to be read"
   valSet _ _ = error "Record is not meant to be written"
-  valDelete keyBS = Hedis.del [keyBS]
+  valDelete keyBS = Hedis.del (keyBS :| [])
     >>= expectRight "valDelete/Record" >>= ignore @Integer
   valSetTTLIfExists keyBS (TTLSec ttlSec) =
     Hedis.expire keyBS ttlSec >>= expectRight "setTTLIfExists/Record"
@@ -1275,11 +1282,11 @@ instance Value inst (PubSub msg) where
   type Identifier (PubSub msg) = ByteString
   txValGet _ = error "PubSub is not meant to be read"
   txValSet _ _ = error "PubSub is not meant to be written"
-  txValDelete keyBS = void . txWrap $ Hedis.del [keyBS]
+  txValDelete keyBS = void . txWrap $ Hedis.del (keyBS :| [])
   txValSetTTLIfExists keyBS (TTLSec ttlSec) = txWrap $ Hedis.expire keyBS ttlSec
   valGet _ = error "PubSub is not meant to be read"
   valSet _ _ = error "PubSub is not meant to be written"
-  valDelete keyBS = Hedis.del [keyBS]
+  valDelete keyBS = Hedis.del (keyBS :| [])
     >>= expectRight "valDelete/PubSub" >>= ignore @Integer
   valSetTTLIfExists keyBS (TTLSec ttlSec) =
     Hedis.expire keyBS ttlSec >>= expectRight "setTTLIfExists/PubSub"

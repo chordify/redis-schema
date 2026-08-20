@@ -23,7 +23,6 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances #-} -- for (RefInstance ref) in constraints in instance head
-{-# OPTIONS_GHC -fno-warn-orphans #-} -- for Hedis.RedisResult (a,b,c)
 
 -- | The schema-based Redis module.
 --   This module is intended to be imported qualified.
@@ -1073,11 +1072,6 @@ bzPopMin (toIdentifier -> keyBS) timeout =
 --   Available since Redis 5.0.0
 bzpopmin :: Hedis.RedisCtx m f => ByteString -> Integer -> m (f (Maybe (ByteString, ByteString, Double)))
 bzpopmin k timeout = Hedis.sendRequest ["BZPOPMIN", k, toBS timeout]
-
--- Orphan instance, Hedis only implements this for 2-tuples, but BZPOPMIN gets 3 results
-instance (Hedis.RedisResult a, Hedis.RedisResult b, Hedis.RedisResult c) => Hedis.RedisResult (a,b,c) where
-  decode (Hedis.MultiBulk (Just [x,y,z])) = (,,) <$> Hedis.decode x <*> Hedis.decode y <*> Hedis.decode z
-  decode r                                = Left r
 
 -- | Get elements from a sorted set, between the given min and max values, and with the given offset and limit.
 zRangeByScoreLimit :: forall ref a. (Ref ref, ValueType ref ~ [(Priority, a)], Serializable a)
